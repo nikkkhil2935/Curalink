@@ -14,9 +14,19 @@ const sourceDocSchema = new mongoose.Schema(
     authors: [String],
     year: Number,
     url: String,
+    journal: String,
+    citedByCount: Number,
+    isOpenAccess: Boolean,
     status: String,
+    statusColor: String,
     phase: String,
+    studyType: String,
     eligibility: String,
+    gender: String,
+    minAge: String,
+    maxAge: String,
+    completionDate: String,
+    isLocationRelevant: Boolean,
     locations: [String],
     contacts: [
       {
@@ -25,6 +35,11 @@ const sourceDocSchema = new mongoose.Schema(
         phone: String
       }
     ],
+    relevanceScore: Number,
+    recencyScore: Number,
+    locationScore: Number,
+    sourceCredibility: Number,
+    finalScore: Number,
     queryAssociations: [String],
     timesUsed: { type: Number, default: 0 },
     lastRelevanceScore: Number

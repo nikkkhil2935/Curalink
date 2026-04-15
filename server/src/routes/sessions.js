@@ -51,6 +51,97 @@ router.get('/:id', async (req, res, next) => {
 
 router.get('/:id/sources', async (req, res, next) => {
   try {
+    const mode = String(req.query.mode || '').toLowerCase();
+
+    if (mode === 'latest') {
+      const latestMessage = await Message.findOne(
+        {
+          sessionId: req.params.id,
+          role: 'assistant',
+          usedSourceIds: { $exists: true, $ne: [] }
+        },
+        { usedSourceIds: 1, sourceIndex: 1 }
+      )
+        .sort({ createdAt: -1 })
+        .lean();
+
+      if (!latestMessage) {
+        return res.json({ sources: [] });
+      }
+
+      const sourceIndex = latestMessage.sourceIndex || {};
+      const orderedIds = [];
+      const seenIds = new Set();
+
+      const indexEntries = Object.entries(sourceIndex)
+        .filter(([, sourceId]) => sourceId)
+        .map(([citationId, sourceId]) => {
+          const match = String(citationId).match(/^([PT])(\d+)$/i);
+          return {
+            citationId: String(citationId),
+            sourceId: String(sourceId),
+            type: match ? match[1].toUpperCase() : 'Z',
+            num: match ? Number(match[2]) : Number.POSITIVE_INFINITY
+          };
+        });
+
+      if (indexEntries.length) {
+        const typeOrder = (type) => (type === 'P' ? 0 : type === 'T' ? 1 : 2);
+        indexEntries.sort((a, b) => {
+          const typeDiff = typeOrder(a.type) - typeOrder(b.type);
+          if (typeDiff !== 0) return typeDiff;
+          const numDiff = a.num - b.num;
+          if (numDiff !== 0) return numDiff;
+          return a.citationId.localeCompare(b.citationId);
+        });
+
+        indexEntries.forEach((entry) => {
+          if (!seenIds.has(entry.sourceId)) {
+            orderedIds.push(entry.sourceId);
+            seenIds.add(entry.sourceId);
+          }
+        });
+      }
+
+      // Keep latest citation order first, then append any uncited used sources.
+      (latestMessage.usedSourceIds || []).forEach((sourceId) => {
+        const normalizedId = String(sourceId);
+        if (!seenIds.has(normalizedId)) {
+          orderedIds.push(normalizedId);
+          seenIds.add(normalizedId);
+        }
+      });
+
+      if (orderedIds.length === 0) {
+        return res.json({ sources: [] });
+      }
+
+      const sourceDocs = await SourceDoc.find({ _id: { $in: orderedIds } }).lean();
+      const sourceById = new Map(sourceDocs.map((doc) => [String(doc._id), doc]));
+
+      const idToCitation = new Map(
+        Object.entries(sourceIndex)
+          .filter(([, sourceId]) => sourceId)
+          .map(([citationId, sourceId]) => [String(sourceId), String(citationId)])
+      );
+
+      const sources = orderedIds
+        .map((sourceId) => {
+          const doc = sourceById.get(String(sourceId));
+          if (!doc) {
+            return null;
+          }
+          return {
+            ...doc,
+            id: String(doc._id),
+            citationId: idToCitation.get(String(sourceId)) || null
+          };
+        })
+        .filter(Boolean);
+
+      return res.json({ sources });
+    }
+
     const messages = await Message.find({ sessionId: req.params.id }, { usedSourceIds: 1 });
     const sourceIds = new Set();
 

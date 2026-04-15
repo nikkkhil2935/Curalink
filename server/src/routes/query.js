@@ -1,16 +1,15 @@
 import express from 'express';
 import Session from '../models/Session.js';
 import Message from '../models/Message.js';
-import Analytics from '../models/Analytics.js';
+import { runRetrievalPipeline } from '../services/pipeline/orchestrator.js';
 
 const router = express.Router();
 
-// Day 1 stub. Real retrieval + ranking pipeline will be added in Day 2/3.
 router.post('/sessions/:id/query', async (req, res, next) => {
   try {
     const { message } = req.body;
 
-    if (!message || !message.trim()) {
+    if (!message?.trim()) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
@@ -20,43 +19,68 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
+    const cleanedMessage = message.trim();
+
+    const conversationHistory = await Message.find({ sessionId: session._id })
+      .sort({ createdAt: -1 })
+      .limit(12)
+      .lean();
+
     await Message.create({
       sessionId: session._id,
       role: 'user',
-      text: message.trim()
+      text: cleanedMessage
     });
+
+    const {
+      responseText,
+      structuredAnswer,
+      contextDocs,
+      stats,
+      evidenceStrength,
+      intentType,
+      expandedQuery,
+      contextBadge,
+      sourceIndex
+    } = await runRetrievalPipeline(session, cleanedMessage, conversationHistory.reverse());
 
     const assistantMessage = await Message.create({
       sessionId: session._id,
       role: 'assistant',
-      text: `Research pipeline placeholder: received \"${message.trim()}\" for ${session.disease}. Full multi-source retrieval will be plugged in next.`,
-      retrievalStats: {
-        totalCandidates: 0,
-        pubmedFetched: 0,
-        openalexFetched: 0,
-        ctFetched: 0,
-        rerankedTo: 0,
-        timeTakenMs: 0
-      }
+      text: responseText,
+      usedSourceIds: contextDocs.map((doc) => doc.id),
+      sourceIndex,
+      retrievalStats: stats,
+      intentType,
+      contextBadge,
+      structuredAnswer
     });
 
-    session.messageCount += 2;
-    session.queryHistory = [...(session.queryHistory || []), message.trim()].slice(-10);
-    session.updatedAt = new Date();
-    await session.save();
-
-    await Analytics.create({
-      event: 'query',
-      disease: session.disease.toLowerCase(),
-      intentType: 'GENERAL',
-      sessionId: session._id,
-      metadata: {
-        query: message.trim(),
-        totalCandidates: 0
-      }
+    await Session.findByIdAndUpdate(req.params.id, {
+      $inc: { messageCount: 2 },
+      $push: { queryHistory: expandedQuery.fullQuery },
+      updatedAt: new Date()
     });
 
-    return res.json({ message: assistantMessage, sources: [] });
+    const idToCitation = Object.entries(sourceIndex || {}).reduce((acc, [citationId, sourceId]) => {
+      if (sourceId) {
+        acc[String(sourceId)] = String(citationId);
+      }
+      return acc;
+    }, {});
+
+    const sourcesWithCitations = (contextDocs || []).map((doc) => ({
+      ...doc,
+      citationId: idToCitation[String(doc.id)] || null
+    }));
+
+    return res.json({
+      message: assistantMessage,
+      sources: sourcesWithCitations,
+      stats,
+      evidenceStrength,
+      sourceIndex
+    });
   } catch (err) {
     return next(err);
   }

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { extractApiError } from '@/utils/api.js';
 
 const diseaseSuggestions = [
   "Parkinson's Disease",
@@ -22,6 +23,8 @@ export default function ContextForm({ onSubmit, onClose }) {
     age: '',
     sex: ''
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const canSubmit = useMemo(() => form.disease.trim().length > 0, [form.disease]);
 
@@ -29,29 +32,38 @@ export default function ContextForm({ onSubmit, onClose }) {
     setForm((previous) => ({ ...previous, [key]: value }));
   };
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
-    if (!canSubmit) {
+    if (!canSubmit || isSubmitting) {
       return;
     }
 
-    onSubmit({
-      disease: form.disease.trim(),
-      intent: form.intent.trim(),
-      location: {
-        city: form.city.trim(),
-        country: form.country.trim()
-      },
-      demographics: {
-        age: form.age ? Number(form.age) : null,
-        sex: form.sex || null
-      }
-    });
+    setIsSubmitting(true);
+    setSubmitError('');
+
+    try {
+      await onSubmit({
+        disease: form.disease.trim(),
+        intent: form.intent.trim(),
+        location: {
+          city: form.city.trim(),
+          country: form.country.trim()
+        },
+        demographics: {
+          age: form.age ? Number(form.age) : null,
+          sex: form.sex || null
+        }
+      });
+    } catch (error) {
+      setSubmitError(extractApiError(error, 'Failed to create session. Please try again.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4">
-      <div className="w-full max-w-xl rounded-2xl border border-slate-700 bg-slate-950 p-6 shadow-2xl">
+      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 p-6 shadow-2xl">
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold text-slate-100">Start a Research Session</h2>
@@ -60,6 +72,7 @@ export default function ContextForm({ onSubmit, onClose }) {
           <button
             type="button"
             onClick={onClose}
+            disabled={isSubmitting}
             className="rounded-lg border border-slate-700 px-3 py-1 text-sm text-slate-300 hover:border-slate-500 hover:text-white"
           >
             Close
@@ -67,12 +80,15 @@ export default function ContextForm({ onSubmit, onClose }) {
         </div>
 
         <form className="space-y-4" onSubmit={submit}>
+          {submitError ? <p className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300">{submitError}</p> : null}
+
           <div>
             <label className="mb-1 block text-sm text-slate-300">Disease / Condition *</label>
             <input
               value={form.disease}
               onChange={(event) => update('disease', event.target.value)}
               placeholder="e.g. Parkinson's Disease"
+              disabled={isSubmitting}
               className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
               required
             />
@@ -82,6 +98,7 @@ export default function ContextForm({ onSubmit, onClose }) {
                   key={suggestion}
                   type="button"
                   onClick={() => update('disease', suggestion)}
+                  disabled={isSubmitting}
                   className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300 hover:border-slate-500"
                 >
                   {suggestion}
@@ -96,6 +113,7 @@ export default function ContextForm({ onSubmit, onClose }) {
               value={form.intent}
               onChange={(event) => update('intent', event.target.value)}
               placeholder="e.g. Deep brain stimulation outcomes"
+              disabled={isSubmitting}
               className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
             />
           </div>
@@ -107,6 +125,7 @@ export default function ContextForm({ onSubmit, onClose }) {
                 value={form.city}
                 onChange={(event) => update('city', event.target.value)}
                 placeholder="Toronto"
+                disabled={isSubmitting}
                 className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
               />
             </div>
@@ -116,6 +135,7 @@ export default function ContextForm({ onSubmit, onClose }) {
                 value={form.country}
                 onChange={(event) => update('country', event.target.value)}
                 placeholder="Canada"
+                disabled={isSubmitting}
                 className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
               />
             </div>
@@ -131,6 +151,7 @@ export default function ContextForm({ onSubmit, onClose }) {
                 value={form.age}
                 onChange={(event) => update('age', event.target.value)}
                 placeholder="45"
+                disabled={isSubmitting}
                 className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
               />
             </div>
@@ -139,6 +160,7 @@ export default function ContextForm({ onSubmit, onClose }) {
               <select
                 value={form.sex}
                 onChange={(event) => update('sex', event.target.value)}
+                disabled={isSubmitting}
                 className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-blue-500"
               >
                 <option value="">Prefer not to say</option>
@@ -155,16 +177,17 @@ export default function ContextForm({ onSubmit, onClose }) {
             <button
               type="button"
               onClick={onClose}
+              disabled={isSubmitting}
               className="flex-1 rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:border-slate-500 hover:text-white"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={!canSubmit}
+              disabled={!canSubmit || isSubmitting}
               className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Begin Research
+              {isSubmitting ? 'Starting...' : 'Begin Research'}
             </button>
           </div>
         </form>

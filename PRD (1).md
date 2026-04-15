@@ -545,7 +545,7 @@ MongoDB                  → MongoDB Atlas (free 512MB)
 Environment variables needed:
 ```
 MONGODB_URI=
-LLM_SERVICE_URL=http://localhost:8000
+LLM_SERVICE_URL=http://127.0.0.1:8001
 PUBMED_API_KEY=         # optional, higher rate limits
 PORT=5000
 FRONTEND_URL=

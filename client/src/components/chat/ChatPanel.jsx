@@ -1,48 +1,58 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
 import { useAppStore } from '@/store/useAppStore.js';
 import ChatInput from './ChatInput.jsx';
 import MessageBubble from './MessageBubble.jsx';
+import LoadingOverlay from '@/components/ui/LoadingOverlay.jsx';
+import ErrorBanner from '@/components/ui/ErrorBanner.jsx';
+import { api, extractApiError } from '@/utils/api.js';
 
 export default function ChatPanel({ className = '' }) {
   const { sessionId } = useParams();
-  const { currentSession, messages, addMessage, isLoading, setLoading, setSources } = useAppStore();
+  const { currentSession, messages, addMessage, applyAssistantResponse, isLoading, setLoading } = useAppStore();
   const bottomRef = useRef(null);
+  const [queryError, setQueryError] = useState('');
+  const [lastUserMessage, setLastUserMessage] = useState('');
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isLoading, queryError]);
 
-  const sendMessage = async (text) => {
+  const sendMessage = async (text, { retry = false } = {}) => {
     const trimmed = text.trim();
     if (!trimmed || !sessionId) {
       return;
     }
 
-    addMessage({
-      _id: `local-user-${Date.now()}`,
-      role: 'user',
-      text: trimmed,
-      createdAt: new Date().toISOString()
-    });
+    setQueryError('');
+    setLastUserMessage(trimmed);
+
+    if (!retry) {
+      addMessage({
+        _id: `local-user-${Date.now()}`,
+        role: 'user',
+        text: trimmed,
+        createdAt: new Date().toISOString()
+      });
+    }
 
     setLoading(true);
 
     try {
-      const { data } = await axios.post(`/api/sessions/${sessionId}/query`, { message: trimmed });
-      addMessage(data.message);
-      setSources(data.sources || []);
+      const { data } = await api.post(`/sessions/${sessionId}/query`, { message: trimmed });
+      applyAssistantResponse(data.message, data.sources);
     } catch (error) {
-      addMessage({
-        _id: `local-assistant-${Date.now()}`,
-        role: 'assistant',
-        text: 'Something failed while sending your message. Please retry.',
-        createdAt: new Date().toISOString()
-      });
+      setQueryError(extractApiError(error, 'Unable to retrieve research evidence right now.'));
     } finally {
       setLoading(false);
     }
+  };
+
+  const retryLastMessage = () => {
+    if (!lastUserMessage || isLoading) {
+      return;
+    }
+    sendMessage(lastUserMessage, { retry: true });
   };
 
   return (
@@ -65,10 +75,10 @@ export default function ChatPanel({ className = '' }) {
           <MessageBubble key={message._id || `${message.role}-${index}`} message={message} />
         ))}
 
+        {queryError ? <ErrorBanner message={queryError} onRetry={retryLastMessage} /> : null}
+
         {isLoading ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-400">
-            Fetching and ranking research candidates (placeholder mode)...
-          </div>
+          <LoadingOverlay message="Searching 300+ research sources..." />
         ) : null}
 
         <div ref={bottomRef} />

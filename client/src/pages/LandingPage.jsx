@@ -1,25 +1,36 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import ContextForm from '@/components/ContextForm.jsx';
+import ErrorBanner from '@/components/ui/ErrorBanner.jsx';
+import { api, extractApiError } from '@/utils/api.js';
 
 export default function LandingPage() {
   const [showForm, setShowForm] = useState(false);
   const [recentSessions, setRecentSessions] = useState([]);
+  const [sessionLoadError, setSessionLoadError] = useState('');
+  const [startError, setStartError] = useState('');
+  const [reloadSessionsToken, setReloadSessionsToken] = useState(0);
   const navigate = useNavigate();
+
+  const reloadSessions = () => {
+    setReloadSessionsToken((previous) => previous + 1);
+  };
 
   useEffect(() => {
     let isMounted = true;
 
-    axios
-      .get('/api/sessions')
+    setSessionLoadError('');
+
+    api
+      .get('/sessions')
       .then(({ data }) => {
         if (isMounted) {
           setRecentSessions(data.sessions || []);
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (isMounted) {
+          setSessionLoadError(extractApiError(error, 'Unable to load recent sessions.'));
           setRecentSessions([]);
         }
       });
@@ -27,14 +38,18 @@ export default function LandingPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [reloadSessionsToken]);
 
   const handleStartResearch = async (formData) => {
+    setStartError('');
+
     try {
-      const { data } = await axios.post('/api/sessions', formData);
+      const { data } = await api.post('/sessions', formData);
       navigate(`/research/${data.session._id}`);
     } catch (error) {
-      console.error('Failed to create session', error);
+      const message = extractApiError(error, 'Failed to start research session.');
+      setStartError(message);
+      throw error;
     }
   };
 
@@ -54,7 +69,10 @@ export default function LandingPage() {
 
           <div className="mt-7 flex flex-wrap gap-3">
             <button
-              onClick={() => setShowForm(true)}
+              onClick={() => {
+                setStartError('');
+                setShowForm(true);
+              }}
               className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-500"
             >
               Start Research
@@ -72,6 +90,8 @@ export default function LandingPage() {
             <StatCard label="Candidate depth" value="300-500" />
             <StatCard label="Default model" value="Llama 3.1 8B" />
           </div>
+
+          {startError ? <div className="mt-6"><ErrorBanner message={startError} /></div> : null}
         </header>
 
         <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-950/50 p-6">
@@ -79,6 +99,8 @@ export default function LandingPage() {
             <h2 className="text-lg font-semibold">Recent Sessions</h2>
             <span className="text-xs text-slate-400">Latest 10</span>
           </div>
+
+          {sessionLoadError ? <div className="mb-4"><ErrorBanner message={sessionLoadError} onRetry={reloadSessions} /></div> : null}
 
           {recentSessions.length === 0 ? (
             <p className="text-sm text-slate-400">No sessions yet. Start your first research session.</p>

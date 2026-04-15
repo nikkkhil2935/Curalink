@@ -17,6 +17,7 @@ const trialSummarySchema = new mongoose.Schema(
     summary: String,
     status: String,
     location_relevant: Boolean,
+    contact: String,
     source_ids: [String]
   },
   { _id: false }
@@ -53,6 +54,10 @@ const messageSchema = new mongoose.Schema(
     text: { type: String, required: true },
     structuredAnswer: { type: structuredAnswerSchema, default: null },
     usedSourceIds: [String],
+    sourceIndex: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    },
     retrievalStats: {
       totalCandidates: Number,
       pubmedFetched: Number,

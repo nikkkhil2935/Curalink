@@ -1,37 +1,68 @@
 # Curalink
 
-Curalink is a full-stack AI medical research assistant scaffold aligned to your PRD and Day 1 implementation plan.
+AI-powered medical research assistant focused on evidence-first responses.
 
-This repository currently includes:
+## What Makes Curalink Unique
 
-- MERN skeleton (React + Node/Express + MongoDB schemas)
-- FastAPI LLM service placeholder
-- Session + query + analytics + export routes
-- 3-panel research UI shell with chat/evidence/sidebar
-- Placeholder responses for retrieval/ranking/generation (to be implemented later)
+- Deep retrieval across PubMed, OpenAlex, and ClinicalTrials.gov
+- Hybrid ranking pipeline (keyword + semantic + recency + location)
+- Structured RAG output with source-linked evidence
+- Timeline, researcher spotlight, and trial-centric evidence views
+- PDF export for sharable research briefs
+- Analytics dashboard for usage, intent, and source insights
 
-## Workspace Structure
+## Architecture
 
+```text
+React (Vite)
+  -> Express API (Node.js)
+      -> Retrieval adapters (PubMed, OpenAlex, ClinicalTrials)
+      -> Ranking + context packaging
+      -> FastAPI LLM service
+      -> MongoDB (sessions, messages, source docs, analytics)
 ```
-Curalink/
-  client/        React + Vite frontend
-  server/        Express + MongoDB backend
-  llm-service/   FastAPI placeholder service
+
+## Stack
+
+- Frontend: React 18, Vite, Tailwind CSS, Recharts, Zustand
+- Backend: Node.js, Express, Mongoose
+- LLM service: FastAPI, SentenceTransformers, Ollama-compatible generation
+- Database: MongoDB
+- Deployment targets: Vercel (frontend), Railway (backend), Render (LLM)
+
+## Retrieval and Generation Pipeline
+
+1. Intent classification
+2. Query expansion
+3. Parallel retrieval from 3 sources
+4. Normalization and deduplication
+5. Hybrid reranking
+6. Context packaging with citation index
+7. LLM structured synthesis
+8. Evidence-first response rendering
+
+## Local Setup
+
+### 1) LLM service
+
+```bash
+cd llm-service
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8001
 ```
 
-## 1) Backend Setup
+### 2) Backend
 
 ```bash
 cd server
 npm install
+cp .env.example .env
 npm run dev
 ```
 
-Runs on `http://localhost:5000`.
-
-Environment file is at `server/.env`.
-
-## 2) Frontend Setup
+### 3) Frontend
 
 ```bash
 cd client
@@ -39,47 +70,67 @@ npm install
 npm run dev
 ```
 
-Runs on `http://localhost:5173` and proxies `/api` to backend.
+### Local Troubleshooting
 
-## 3) LLM Service Setup
+- If MongoDB Atlas SRV resolution fails on Windows, use a non-SRV URI with explicit shard hosts instead of `mongodb+srv://`.
+- If your MongoDB password contains special characters (for example `@`), URL-encode them (for example `%40`).
+- Local port `8000` may already be in use in some environments; keep `LLM_SERVICE_URL` on `http://127.0.0.1:8001` and run the LLM service on port `8001`.
 
-```bash
-cd llm-service
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
+## Production Environment Variables
 
-Runs on `http://localhost:8000`.
+### Backend (Railway)
 
-## Day 1 Scope and Placeholders
+- `MONGODB_URI`
+- `LLM_SERVICE_URL`
+- `FRONTEND_URL`
+- `PORT`
+- `NODE_ENV`
 
-The following are intentionally placeholder implementations for later phases:
+### LLM service (Render)
 
-- Retrieval integrations (PubMed/OpenAlex/ClinicalTrials)
-- Hybrid ranking and evidence scoring internals
-- Full RAG prompting with local Ollama/BioMistral
-- Production PDF generation
+- `OLLAMA_URL` (if using Ollama endpoint)
+- `OLLAMA_MODEL`
+- `GROQ_API_KEY` (optional hosted fallback)
 
-## Current API Endpoints
+### Frontend (Vercel)
 
-### Backend
+- `VITE_API_URL` (for example: `https://your-backend.railway.app/api`)
+
+## API Endpoints
+
+### Sessions
 
 - `POST /api/sessions`
+- `GET /api/sessions`
 - `GET /api/sessions/:id`
 - `GET /api/sessions/:id/sources`
-- `GET /api/sessions`
 - `DELETE /api/sessions/:id`
-- `POST /api/sessions/:id/query` (placeholder answer)
+
+### Query
+
+- `POST /api/sessions/:id/query`
+
+### Analytics
+
+- `GET /api/analytics/overview`
 - `GET /api/analytics/top-diseases`
+- `GET /api/analytics/intent-breakdown`
 - `GET /api/analytics/source-stats`
-- `POST /api/export/:sessionId` (placeholder)
+- `GET /api/analytics/trial-status`
+
+### Export
+
+- `POST /api/export/:sessionId`
+
+### Health
+
 - `GET /api/health`
+- `GET /health` (LLM service)
 
-### LLM Service
+## Day 4 Status
 
-- `GET /health`
-- `GET /models`
-- `POST /embed` (placeholder vectors)
-- `POST /generate` (placeholder structured JSON)
+- Expanded analytics API and dashboard widgets
+- Added shared loading and error UI primitives
+- Added mobile tabbed research layout
+- Added production API client configuration for frontend
+- Improved form submission resiliency and bootstrap error handling

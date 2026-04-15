@@ -381,7 +381,7 @@ export default router;
 ### server/.env
 ```
 MONGODB_URI=mongodb+srv://your_connection_string
-LLM_SERVICE_URL=http://localhost:8000
+LLM_SERVICE_URL=http://127.0.0.1:8001
 FRONTEND_URL=http://localhost:5173
 PORT=5000
 PUBMED_EMAIL=your@email.com

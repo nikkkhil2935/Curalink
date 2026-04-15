@@ -1,30 +1,17 @@
 import { useMemo } from 'react';
-import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore.js';
+import ExportButton from './ExportButton.jsx';
 
 export default function Sidebar() {
-  const { sessionId } = useParams();
   const { currentSession, messages } = useAppStore();
+  const navigate = useNavigate();
 
   const latestRetrievalStats = useMemo(() => {
     const assistantMessages = [...messages].reverse().filter((message) => message.role === 'assistant');
     const latest = assistantMessages.find((message) => message.retrievalStats);
     return latest?.retrievalStats || null;
   }, [messages]);
-
-  const exportPlaceholder = async () => {
-    if (!sessionId) {
-      return;
-    }
-
-    try {
-      await axios.post(`/api/export/${sessionId}`);
-      window.alert('Export placeholder triggered. PDF generation is scheduled for a later phase.');
-    } catch (error) {
-      window.alert('Export request failed.');
-    }
-  };
 
   return (
     <div className="flex h-full flex-col justify-between p-4">
@@ -51,21 +38,29 @@ export default function Sidebar() {
               <p>PubMed fetched: {latestRetrievalStats.pubmedFetched ?? 0}</p>
               <p>OpenAlex fetched: {latestRetrievalStats.openalexFetched ?? 0}</p>
               <p>ClinicalTrials fetched: {latestRetrievalStats.ctFetched ?? 0}</p>
-              <p>Reranked to: {latestRetrievalStats.rerankedTo ?? 0}</p>
+              <p>Shown to you: {latestRetrievalStats.rerankedTo ?? 0}</p>
+              {latestRetrievalStats.timeTakenMs ? (
+                <p className="border-t border-slate-800 pt-1 text-slate-500">
+                  Retrieved in {(latestRetrievalStats.timeTakenMs / 1000).toFixed(1)}s
+                </p>
+              ) : null}
             </div>
           ) : (
-            <p className="mt-3 text-xs text-slate-400">No retrieval stats yet. Placeholder until Day 2 pipeline.</p>
+            <p className="mt-3 text-xs text-slate-400">No retrieval stats yet. Ask a research question to populate metrics.</p>
           )}
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={exportPlaceholder}
-        className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
-      >
-        Export Research Brief (placeholder)
-      </button>
+      <div className="space-y-2">
+        <ExportButton />
+        <button
+          type="button"
+          onClick={() => navigate('/analytics')}
+          className="w-full rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
+        >
+          Analytics Dashboard
+        </button>
+      </div>
     </div>
   );
 }

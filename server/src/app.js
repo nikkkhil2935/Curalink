@@ -47,12 +47,22 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/export', exportRoutes);
 
 app.get('/api/health', async (req, res) => {
-  const llmServiceUrl = process.env.LLM_SERVICE_URL || 'http://localhost:8000';
+  const llmServiceUrl = process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001';
   let llmStatus = 'offline';
+  let llmProvider = null;
 
   try {
     const response = await fetch(`${llmServiceUrl}/health`);
-    llmStatus = response.ok ? 'online' : 'offline';
+    if (response.ok) {
+      const health = await response.json().catch(() => null);
+      llmStatus = health?.status === 'ok' ? 'online' : 'degraded';
+
+      if (health?.providers?.ollama?.status === 'online') {
+        llmProvider = 'ollama';
+      } else if (health?.providers?.groq?.configured) {
+        llmProvider = 'groq';
+      }
+    }
   } catch (error) {
     llmStatus = 'offline';
   }
@@ -61,6 +71,7 @@ app.get('/api/health', async (req, res) => {
     status: 'ok',
     mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     llm: llmStatus,
+    llmProvider,
     timestamp: new Date().toISOString()
   });
 });

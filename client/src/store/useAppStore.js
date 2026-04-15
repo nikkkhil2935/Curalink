@@ -13,6 +13,11 @@ export const useAppStore = create((set, get) => ({
     set((state) => ({
       messages: [...state.messages, message]
     })),
+  applyAssistantResponse: (message, sources) =>
+    set((state) => ({
+      messages: [...state.messages, message],
+      sources: sources || []
+    })),
   setMessages: (messages) => set({ messages }),
   setSources: (sources) => set({ sources }),
   setLoading: (val) => set({ isLoading: val }),
