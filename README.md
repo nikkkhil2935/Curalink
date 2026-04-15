@@ -11,6 +11,14 @@ AI-powered medical research assistant focused on evidence-first responses.
 - PDF export for sharable research briefs
 - Analytics dashboard for usage, intent, and source insights
 
+## Reliability And UX Upgrades
+
+- Message-scoped evidence alignment: selecting an assistant answer now binds the evidence panel and export flow to that exact turn.
+- Retrieval hardening: no-evidence queries return deterministic grounded fallbacks instead of unconstrained generation.
+- Trial preservation in ranking: clinical trial evidence is retained through semantic reranking and context selection.
+- Scheduled analytics snapshots: background scheduler records hourly growth snapshots exposed in dashboard trends.
+- UI primitives upgraded with shadcn-style patterns (`class-variance-authority`, `clsx`, `tailwind-merge`) and motion-enhanced visuals (`framer-motion`).
+
 ## Architecture
 
 ```text
@@ -70,11 +78,36 @@ npm install
 npm run dev
 ```
 
+Optional local quality checks:
+
+```bash
+cd client
+npm run check
+
+cd ../server
+npm run check
+```
+
+Optional 21st.dev MCP tooling (from `client`):
+
+```bash
+npm run 21st:setup
+npm run magic:mcp
+```
+
 ### Local Troubleshooting
 
 - If MongoDB Atlas SRV resolution fails on Windows, use a non-SRV URI with explicit shard hosts instead of `mongodb+srv://`.
 - If your MongoDB password contains special characters (for example `@`), URL-encode them (for example `%40`).
 - Local port `8000` may already be in use in some environments; keep `LLM_SERVICE_URL` on `http://127.0.0.1:8001` and run the LLM service on port `8001`.
+- Backend now tries `MONGODB_URI`, then `MONGODB_URI_FALLBACK`, then optional local fallback (`MONGODB_URI_LOCAL`) when `MONGODB_ALLOW_LOCAL_FALLBACK=true`.
+- In-memory Mongo fallback is intended for local development only and should be enabled explicitly via `MONGODB_MEMORY_FALLBACK=true`.
+- LLM service now supports a local continuity fallback for `/generate`, `/embed`, and `/rerank` when Ollama/Groq/torch are unavailable.
+- Frontend dev proxy can be changed with `VITE_DEV_API_PROXY` (default `http://localhost:5000`).
+- Backend health now reports `llmQuality` so local fallback mode is visible (`full` vs `degraded`).
+- Backend analytics scheduler is controlled by:
+  - `ANALYTICS_SCHEDULER_ENABLED` (`true` by default)
+  - `ANALYTICS_SNAPSHOT_CRON` (default hourly: `0 * * * *`)
 
 ## Production Environment Variables
 
@@ -126,6 +159,14 @@ npm run dev
 
 - `GET /api/health`
 - `GET /health` (LLM service)
+
+## Frontend Routes
+
+- `/` — Landing and session launch
+- `/research/:sessionId` — Research workspace (chat + evidence + stats)
+- `/analytics` — Analytics dashboard
+- `/platform` — Product overview and pipeline view
+- `/status` — Live operational readiness view
 
 ## Day 4 Status
 

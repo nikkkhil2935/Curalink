@@ -84,34 +84,67 @@ export async function semanticRerank(query, documents) {
 /**
  * Parse and validate LLM response with resilient fallback behavior.
  */
-export function parseLLMResponse(llmData) {
-  if (llmData?.parsed && isValidStructuredAnswer(llmData.parsed)) {
-    return normalizeStructuredAnswer(llmData.parsed);
-  }
+export function parseLLMResponse(llmData, options = {}) {
+  const allowedCitationIds = Array.isArray(options.allowedCitationIds)
+    ? options.allowedCitationIds.map((id) => String(id).toUpperCase())
+    : [];
 
-  if (llmData?.text) {
-    try {
-      const cleaned = llmData.text
-        .replace(/^```json\s*/i, '')
-        .replace(/^```\s*/i, '')
-        .replace(/```\s*$/i, '')
-        .trim();
-      const parsed = JSON.parse(cleaned);
-      if (isValidStructuredAnswer(parsed)) {
-        return normalizeStructuredAnswer(parsed);
-      }
-    } catch {
-      // no-op, use fallback below
+  if (llmData?.parsed) {
+    const normalized = normalizeStructuredAnswer(llmData.parsed, allowedCitationIds);
+    if (isValidStructuredAnswer(normalized)) {
+      return normalized;
     }
   }
 
-  return createParserFallback();
+  const parsedFromText = extractJsonPayload(llmData?.text || '');
+  if (parsedFromText) {
+    const normalized = normalizeStructuredAnswer(parsedFromText, allowedCitationIds);
+    if (isValidStructuredAnswer(normalized)) {
+      return normalized;
+    }
+  }
+
+  return createParserFallback(options);
 }
 
-function createParserFallback() {
+function extractJsonPayload(rawText) {
+  if (!rawText || typeof rawText !== 'string') {
+    return null;
+  }
+
+  const cleaned = rawText
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // Fall through to object extraction.
+  }
+
+  const objectMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!objectMatch) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(objectMatch[0]);
+  } catch {
+    return null;
+  }
+}
+
+function createParserFallback(options = {}) {
+  const strength = ['LIMITED', 'MODERATE', 'STRONG'].includes(options.evidenceStrengthLabel)
+    ? options.evidenceStrengthLabel
+    : 'LIMITED';
+  const disease = options.disease || 'this condition';
+
   return {
-    condition_overview: 'Evidence synthesis could not be parsed. Please review the retrieved sources directly.',
-    evidence_strength: 'LIMITED',
+    condition_overview: `Structured generation could not be validated for ${disease}. Please review the evidence panel directly.`,
+    evidence_strength: strength,
     research_insights: [],
     clinical_trials: [],
     key_researchers: [],
@@ -129,39 +162,91 @@ function isValidStructuredAnswer(obj) {
   return (
     obj &&
     typeof obj === 'object' &&
-    (obj.condition_overview || obj.research_insights || obj.recommendations)
+    typeof obj.condition_overview === 'string' &&
+    Array.isArray(obj.research_insights) &&
+    Array.isArray(obj.clinical_trials) &&
+    Array.isArray(obj.follow_up_suggestions)
   );
 }
 
-function normalizeStructuredAnswer(answer) {
-  return {
-    condition_overview: answer.condition_overview || '',
-    evidence_strength: ['LIMITED', 'MODERATE', 'STRONG'].includes(answer.evidence_strength)
-      ? answer.evidence_strength
-      : 'MODERATE',
-    research_insights: Array.isArray(answer.research_insights)
-      ? answer.research_insights.map((insight) => ({
+function normalizeStructuredAnswer(answer, allowedCitationIds = []) {
+  const allowedSet = new Set(
+    (Array.isArray(allowedCitationIds) ? allowedCitationIds : []).map((id) =>
+      String(id).toUpperCase()
+    )
+  );
+
+  const normalizeSourceIds = (sourceIds) => {
+    if (!Array.isArray(sourceIds)) {
+      return [];
+    }
+
+    const ids = sourceIds
+      .map((id) => String(id).toUpperCase().trim())
+      .filter(Boolean);
+
+    if (!allowedSet.size) {
+      return [];
+    }
+
+    return ids.filter((id, index) => allowedSet.has(id) && ids.indexOf(id) === index);
+  };
+
+  const normalizedInsights = Array.isArray(answer.research_insights)
+    ? answer.research_insights
+        .map((insight) => ({
           insight: insight?.insight || '',
           type: ['TREATMENT', 'DIAGNOSIS', 'RISK', 'PREVENTION', 'GENERAL'].includes(insight?.type)
             ? insight.type
             : 'GENERAL',
-          source_ids: Array.isArray(insight?.source_ids) ? insight.source_ids.filter(Boolean) : []
+          source_ids: normalizeSourceIds(insight?.source_ids)
         }))
-      : [],
-    clinical_trials: Array.isArray(answer.clinical_trials)
-      ? answer.clinical_trials.map((trial) => ({
+        .filter((insight) => insight.insight && insight.source_ids.length > 0)
+    : [];
+
+  const normalizedTrials = Array.isArray(answer.clinical_trials)
+    ? answer.clinical_trials
+        .map((trial) => ({
           summary: trial?.summary || '',
           status: trial?.status || '',
           location_relevant: Boolean(trial?.location_relevant),
           contact: trial?.contact || '',
-          source_ids: Array.isArray(trial?.source_ids) ? trial.source_ids.filter(Boolean) : []
+          source_ids: normalizeSourceIds(trial?.source_ids)
         }))
-      : [],
+        .filter((trial) => trial.summary && trial.source_ids.length > 0)
+    : [];
+
+  const followUpDefaults = [
+    'Can you summarize the strongest findings from the listed sources?',
+    'Can you focus on recruiting clinical trials near my location?',
+    'Can you compare benefits and risks from the top studies?'
+  ];
+
+  const followUpSuggestions = [
+    ...(Array.isArray(answer.follow_up_suggestions) ? answer.follow_up_suggestions : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+    ...followUpDefaults
+  ].filter((value, index, arr) => arr.indexOf(value) === index).slice(0, 3);
+
+  const baseRecommendations = String(answer.recommendations || '').trim();
+  const providerSuffix = 'Please consult your healthcare provider for personalized guidance.';
+  const recommendations = baseRecommendations
+    ? baseRecommendations.toLowerCase().includes('please consult your healthcare provider')
+      ? baseRecommendations
+      : `${baseRecommendations.replace(/\.+$/, '')}. ${providerSuffix}`
+    : providerSuffix;
+
+  return {
+    condition_overview: String(answer.condition_overview || ''),
+    evidence_strength: ['LIMITED', 'MODERATE', 'STRONG'].includes(answer.evidence_strength)
+      ? answer.evidence_strength
+      : 'MODERATE',
+    research_insights: normalizedInsights,
+    clinical_trials: normalizedTrials,
     key_researchers: Array.isArray(answer.key_researchers) ? answer.key_researchers.filter(Boolean) : [],
-    recommendations: answer.recommendations || '',
-    follow_up_suggestions: Array.isArray(answer.follow_up_suggestions)
-      ? answer.follow_up_suggestions.filter(Boolean)
-      : []
+    recommendations,
+    follow_up_suggestions: followUpSuggestions
   };
 }
 

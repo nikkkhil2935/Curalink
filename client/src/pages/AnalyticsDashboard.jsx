@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Activity, ArrowLeft, Clock, Database, Search } from 'lucide-react';
 import LoadingOverlay from '@/components/ui/LoadingOverlay.jsx';
 import ErrorBanner from '@/components/ui/ErrorBanner.jsx';
+import AppTopNav from '@/components/layout/AppTopNav.jsx';
 import { api, extractApiError } from '@/utils/api.js';
 
-const COLORS = ['#2563eb', '#0ea5e9', '#16a34a', '#ca8a04', '#dc2626', '#7c3aed'];
+const COLORS = ['var(--color-blue-500)', 'var(--color-cyan-500)', 'var(--color-green-400)', 'var(--color-amber-500)', 'var(--color-red-500)', 'var(--color-violet-700)'];
 
 function StatCard({ icon: Icon, label, value, subtitle, tone = 'blue' }) {
   const toneMap = {
@@ -37,47 +38,62 @@ export default function AnalyticsDashboard() {
     diseases: [],
     intents: [],
     sources: [],
-    trialStatus: []
+    trialStatus: [],
+    snapshots: []
   });
 
   const loadDashboard = async () => {
     setLoading(true);
     setError('');
 
-    try {
-      const [overviewResponse, diseasesResponse, intentsResponse, sourcesResponse, trialStatusResponse] = await Promise.all([
-        api.get('/analytics/overview').then((response) => response.data),
-        api.get('/analytics/top-diseases').then((response) => response.data),
-        api.get('/analytics/intent-breakdown').then((response) => response.data),
-        api.get('/analytics/source-stats').then((response) => response.data),
-        api.get('/analytics/trial-status').then((response) => response.data)
-      ]);
+    const [overviewResult, diseasesResult, intentsResult, sourcesResult, trialStatusResult, snapshotsResult] = await Promise.allSettled([
+      api.get('/analytics/overview').then((response) => response.data),
+      api.get('/analytics/top-diseases').then((response) => response.data),
+      api.get('/analytics/intent-breakdown').then((response) => response.data),
+      api.get('/analytics/source-stats').then((response) => response.data),
+      api.get('/analytics/trial-status').then((response) => response.data),
+      api.get('/analytics/snapshots?limit=24').then((response) => response.data)
+    ]);
 
-      const diseases = diseasesResponse.diseases ||
-        (diseasesResponse.topDiseases || []).map((entry) => ({
-          name: entry.disease,
-          count: entry.count
-        }));
+    const failedResults = [overviewResult, diseasesResult, intentsResult, sourcesResult, trialStatusResult, snapshotsResult].filter(
+      (result) => result.status === 'rejected'
+    );
 
-      const sources = sourcesResponse.sources ||
-        (sourcesResponse.distribution || []).map((entry) => ({
-          name: entry.source,
-          count: entry.count,
-          used: Math.round(entry.count)
-        }));
-
-      setData({
-        overview: overviewResponse || null,
-        diseases,
-        intents: intentsResponse.intents || [],
-        sources,
-        trialStatus: trialStatusResponse.statuses || []
-      });
-    } catch (requestError) {
-      setError(extractApiError(requestError, 'Failed to load analytics dashboard.'));
-    } finally {
-      setLoading(false);
+    if (failedResults.length === 6) {
+      setError(extractApiError(failedResults[0].reason, 'Failed to load analytics dashboard.'));
+    } else if (failedResults.length > 0) {
+      setError('Some analytics sections are temporarily unavailable. Showing partial data.');
     }
+
+    const overviewResponse = overviewResult.status === 'fulfilled' ? overviewResult.value : null;
+    const diseasesResponse = diseasesResult.status === 'fulfilled' ? diseasesResult.value : {};
+    const intentsResponse = intentsResult.status === 'fulfilled' ? intentsResult.value : {};
+    const sourcesResponse = sourcesResult.status === 'fulfilled' ? sourcesResult.value : {};
+    const trialStatusResponse = trialStatusResult.status === 'fulfilled' ? trialStatusResult.value : {};
+    const snapshotsResponse = snapshotsResult.status === 'fulfilled' ? snapshotsResult.value : {};
+
+    const diseases = diseasesResponse.diseases ||
+      (diseasesResponse.topDiseases || []).map((entry) => ({
+        name: entry.disease,
+        count: entry.count
+      }));
+
+    const sources = sourcesResponse.sources ||
+      (sourcesResponse.distribution || []).map((entry) => ({
+        name: entry.source,
+        count: entry.count,
+        used: Math.round(entry.count)
+      }));
+
+    setData({
+      overview: overviewResponse || null,
+      diseases,
+      intents: intentsResponse.intents || [],
+      sources,
+      trialStatus: trialStatusResponse.statuses || [],
+      snapshots: snapshotsResponse.snapshots || []
+    });
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -98,9 +114,18 @@ export default function AnalyticsDashboard() {
     [data.overview]
   );
 
+  const snapshotData = useMemo(
+    () =>
+      (data.snapshots || []).map((snapshot) => ({
+        ...snapshot,
+        label: new Date(snapshot.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      })),
+    [data.snapshots]
+  );
+
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-transparent px-6 text-slate-100">
+      <div className="app-shell flex min-h-screen items-center justify-center bg-transparent px-6 text-slate-100">
         <div className="w-full max-w-xl">
           <LoadingOverlay message="Loading analytics..." steps={['Loading overview metrics', 'Compiling disease trends', 'Building source and trial charts']} />
         </div>
@@ -109,20 +134,24 @@ export default function AnalyticsDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-transparent px-6 py-8 text-slate-100">
+    <div className="app-shell min-h-screen bg-transparent px-6 py-8 text-slate-100">
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex flex-wrap items-center gap-4">
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className="rounded-lg border border-slate-700 p-2 text-slate-300 transition hover:border-slate-500 hover:text-white"
-            aria-label="Back to home"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1 className="text-2xl font-black md:text-3xl">Analytics Dashboard</h1>
-            <p className="text-sm text-slate-400">Curalink retrieval and evidence intelligence overview</p>
+        <AppTopNav />
+
+        <header className="surface-panel app-enter flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-4">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="btn-secondary rounded-lg p-2"
+              aria-label="Back to home"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h1 className="text-2xl font-black md:text-3xl">Analytics Dashboard</h1>
+              <p className="text-sm text-slate-400">Curalink retrieval and evidence intelligence overview</p>
+            </div>
           </div>
         </header>
 
@@ -141,8 +170,37 @@ export default function AnalyticsDashboard() {
           <StatCard icon={Clock} label="Avg Response" value={`${overview.avgResponseTimeSec}s`} tone="amber" />
         </section>
 
+        <section className="surface-panel rounded-2xl p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">System Growth Snapshots</h2>
+            <span className="text-xs text-slate-500">Hourly scheduler</span>
+          </div>
+
+          {snapshotData.length < 2 ? (
+            <EmptyState text="Snapshot history will appear after scheduled analytics runs." />
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={snapshotData}>
+                <XAxis dataKey="label" tick={{ fill: 'var(--color-slate-500)', fontSize: 11 }} />
+                <YAxis tick={{ fill: 'var(--color-slate-500)', fontSize: 11 }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{
+                    background: 'var(--color-slate-900)',
+                    border: '1px solid var(--color-slate-700)',
+                    borderRadius: 8,
+                    color: 'var(--color-slate-200)'
+                  }}
+                />
+                <Line type="monotone" dataKey="totalSessions" stroke="var(--color-blue-500)" strokeWidth={2} dot={false} name="Sessions" />
+                <Line type="monotone" dataKey="totalQueries" stroke="var(--color-cyan-500)" strokeWidth={2} dot={false} name="Queries" />
+                <Line type="monotone" dataKey="totalSources" stroke="var(--color-green-400)" strokeWidth={2} dot={false} name="Sources" />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </section>
+
         <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+          <div className="surface-panel rounded-2xl p-5">
             <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Top Searched Diseases</h2>
             {data.diseases.length === 0 ? (
               <EmptyState text="No disease analytics yet. Run a few queries to populate this chart." />
@@ -155,22 +213,27 @@ export default function AnalyticsDashboard() {
                     dataKey="name"
                     tickLine={false}
                     axisLine={false}
-                    tick={{ fill: '#9ca3af', fontSize: 11 }}
+                    tick={{ fill: 'var(--color-slate-500)', fontSize: 11 }}
                     width={140}
                     tickFormatter={(value) =>
                       String(value).length > 18 ? `${String(value).slice(0, 18)}...` : value
                     }
                   />
                   <Tooltip
-                    contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0' }}
+                    contentStyle={{
+                      background: 'var(--color-slate-900)',
+                      border: '1px solid var(--color-slate-700)',
+                      borderRadius: 8,
+                      color: 'var(--color-slate-200)'
+                    }}
                   />
-                  <Bar dataKey="count" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="count" fill="var(--color-blue-500)" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+          <div className="surface-panel rounded-2xl p-5">
             <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Research Source Distribution</h2>
             {data.sources.length === 0 ? (
               <EmptyState text="No source documents are cached yet." />
@@ -184,7 +247,12 @@ export default function AnalyticsDashboard() {
                       ))}
                     </Pie>
                     <Tooltip
-                      contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0' }}
+                      contentStyle={{
+                        background: 'var(--color-slate-900)',
+                        border: '1px solid var(--color-slate-700)',
+                        borderRadius: 8,
+                        color: 'var(--color-slate-200)'
+                      }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -207,7 +275,7 @@ export default function AnalyticsDashboard() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+          <div className="surface-panel rounded-2xl p-5">
             <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Query Intent Types</h2>
             {data.intents.length === 0 ? (
               <EmptyState text="No intent classification data available yet." />
@@ -235,7 +303,7 @@ export default function AnalyticsDashboard() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+          <div className="surface-panel rounded-2xl p-5">
             <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Clinical Trial Status Mix</h2>
             {data.trialStatus.length === 0 ? (
               <EmptyState text="No trial data available yet." />
@@ -254,7 +322,7 @@ export default function AnalyticsDashboard() {
         </section>
 
         {overview.recentQueries?.length ? (
-          <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
+          <section className="surface-panel rounded-2xl p-5">
             <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-400">Recent Queries</h2>
             <div className="space-y-2">
               {overview.recentQueries.map((query, index) => (

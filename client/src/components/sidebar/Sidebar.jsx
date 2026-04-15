@@ -1,22 +1,32 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore.js';
+import ThemeToggle from '@/components/ui/ThemeToggle.jsx';
 import ExportButton from './ExportButton.jsx';
 
 export default function Sidebar() {
-  const { currentSession, messages } = useAppStore();
+  const { currentSession, messages, selectedAssistantMessageId } = useAppStore();
   const navigate = useNavigate();
 
-  const latestRetrievalStats = useMemo(() => {
+  const selectedAssistant = useMemo(() => {
+    if (selectedAssistantMessageId) {
+      return messages.find((message) => String(message._id || '') === String(selectedAssistantMessageId));
+    }
+
     const assistantMessages = [...messages].reverse().filter((message) => message.role === 'assistant');
-    const latest = assistantMessages.find((message) => message.retrievalStats);
-    return latest?.retrievalStats || null;
-  }, [messages]);
+    return assistantMessages.find((message) => message.retrievalStats) || null;
+  }, [messages, selectedAssistantMessageId]);
+
+  const latestRetrievalStats = selectedAssistant?.retrievalStats || null;
 
   return (
     <div className="flex h-full flex-col justify-between p-4">
       <div className="space-y-4">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+        <div className="mb-2 flex items-center justify-end">
+          <ThemeToggle />
+        </div>
+
+        <div className="surface-soft rounded-xl p-4">
           <h3 className="text-xs uppercase tracking-wider text-slate-400">Session</h3>
           <p className="mt-2 text-sm font-semibold text-slate-100">{currentSession?.title || 'Untitled session'}</p>
           <div className="mt-3 space-y-1 text-xs text-slate-300">
@@ -29,8 +39,13 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+        <div className="surface-soft rounded-xl p-4">
           <h3 className="text-xs uppercase tracking-wider text-slate-400">Retrieval stats</h3>
+          {selectedAssistant?.createdAt ? (
+            <p className="mt-1 text-[11px] text-slate-500">
+              Linked answer: {new Date(selectedAssistant.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          ) : null}
 
           {latestRetrievalStats ? (
             <div className="mt-3 space-y-1 text-xs text-slate-300">
@@ -56,7 +71,7 @@ export default function Sidebar() {
         <button
           type="button"
           onClick={() => navigate('/analytics')}
-          className="w-full rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500"
+          className="btn-primary w-full rounded-xl px-4 py-2 text-sm font-semibold"
         >
           Analytics Dashboard
         </button>

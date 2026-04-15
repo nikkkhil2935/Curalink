@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useAppStore } from '@/store/useAppStore.js';
 import PublicationsTab from './PublicationsTab.jsx';
 import TrialsTab from './TrialsTab.jsx';
@@ -13,22 +13,66 @@ const tabs = [
 ];
 
 export default function EvidencePanel() {
-  const { sources, activeTab, setActiveTab } = useAppStore();
+  const { sources, activeTab, setActiveTab, selectedAssistantMessageId, messages } = useAppStore();
+  const tabRefs = useRef([]);
 
   const publications = useMemo(
     () => sources.filter((source) => source.type === 'publication'),
     [sources]
   );
   const trials = useMemo(() => sources.filter((source) => source.type === 'trial'), [sources]);
+  const selectedAssistant = useMemo(
+    () => messages.find((message) => String(message._id || '') === String(selectedAssistantMessageId || '')),
+    [messages, selectedAssistantMessageId]
+  );
+
+  const onTabKeyDown = (event, index) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    let nextIndex = index;
+    if (event.key === 'ArrowRight') {
+      nextIndex = (index + 1) % tabs.length;
+    } else if (event.key === 'ArrowLeft') {
+      nextIndex = (index - 1 + tabs.length) % tabs.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = tabs.length - 1;
+    }
+
+    const nextTab = tabs[nextIndex];
+    if (!nextTab) {
+      return;
+    }
+
+    setActiveTab(nextTab.id);
+    tabRefs.current[nextIndex]?.focus();
+  };
 
   return (
     <section className="flex h-full flex-col bg-slate-950/40">
+      <div className="border-b border-slate-800 px-4 py-2 text-[11px] uppercase tracking-wider text-slate-500">
+        {selectedAssistant?._id
+          ? `Evidence linked to answer at ${new Date(selectedAssistant.createdAt || Date.now()).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit'
+            })}`
+          : 'Select an assistant answer to view aligned evidence'}
+      </div>
       <div className="flex gap-2 overflow-x-auto border-b border-slate-800 px-4 py-3" role="tablist" aria-label="Evidence tabs">
-        {tabs.map((tab) => (
+        {tabs.map((tab, index) => (
           <button
             key={tab.id}
+            ref={(node) => {
+              tabRefs.current[index] = node;
+            }}
             type="button"
             onClick={() => setActiveTab(tab.id)}
+            onKeyDown={(event) => onTabKeyDown(event, index)}
             role="tab"
             id={`${tab.id}-tab`}
             aria-controls={`${tab.id}-panel`}

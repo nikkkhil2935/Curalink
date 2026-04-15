@@ -79,10 +79,24 @@ export function rerankCandidates(candidates, queryTerms, intentType, userLocatio
   return scored.sort((a, b) => b.finalScore - a.finalScore);
 }
 
-export function selectForContext(rankedDocs, maxPubs = 8, maxTrials = 5) {
-  const publications = rankedDocs.filter((doc) => doc.type === 'publication').slice(0, maxPubs);
-  const trials = rankedDocs.filter((doc) => doc.type === 'trial').slice(0, maxTrials);
-  return [...publications, ...trials];
+function getDocKey(doc) {
+  return String(doc?.id || doc?._id || `${doc?.type || 'unknown'}:${doc?.title || ''}`);
+}
+
+export function selectForContext(rankedDocs, maxPubs = 8, maxTrials = 5, options = {}) {
+  const minTrials = Math.max(0, Number(options.minTrials || 0));
+
+  const rankedPublications = rankedDocs.filter((doc) => doc.type === 'publication');
+  const rankedTrials = rankedDocs.filter((doc) => doc.type === 'trial');
+
+  const publications = rankedPublications.slice(0, maxPubs);
+  const guaranteedTrials = Math.min(maxTrials, Math.max(minTrials, 0));
+  const trials = rankedTrials.slice(0, Math.max(guaranteedTrials, Math.min(maxTrials, rankedTrials.length)));
+
+  const selectedKeys = new Set([...publications, ...trials].map(getDocKey));
+
+  // Keep original ranked order while still guaranteeing trial coverage.
+  return rankedDocs.filter((doc) => selectedKeys.has(getDocKey(doc)));
 }
 
 export function computeEvidenceStrength(sources) {

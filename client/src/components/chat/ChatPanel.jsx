@@ -9,14 +9,26 @@ import { api, extractApiError } from '@/utils/api.js';
 
 export default function ChatPanel({ className = '' }) {
   const { sessionId } = useParams();
-  const { currentSession, messages, addMessage, applyAssistantResponse, isLoading, setLoading } = useAppStore();
+  const {
+    currentSession,
+    messages,
+    addMessage,
+    applyAssistantResponse,
+    isLoading,
+    setLoading,
+    sourcesByMessageId,
+    selectedAssistantMessageId,
+    setSelectedAssistantMessage,
+    setSources,
+    setActiveTab
+  } = useAppStore();
   const bottomRef = useRef(null);
-  const [queryError, setQueryError] = useState('');
+  const [panelError, setPanelError] = useState(null);
   const [lastUserMessage, setLastUserMessage] = useState('');
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading, queryError]);
+  }, [messages, isLoading, panelError]);
 
   const sendMessage = async (text, { retry = false } = {}) => {
     const trimmed = text.trim();
@@ -24,7 +36,7 @@ export default function ChatPanel({ className = '' }) {
       return;
     }
 
-    setQueryError('');
+    setPanelError(null);
     setLastUserMessage(trimmed);
 
     if (!retry) {
@@ -42,17 +54,70 @@ export default function ChatPanel({ className = '' }) {
       const { data } = await api.post(`/sessions/${sessionId}/query`, { message: trimmed });
       applyAssistantResponse(data.message, data.sources);
     } catch (error) {
-      setQueryError(extractApiError(error, 'Unable to retrieve research evidence right now.'));
+      setPanelError({
+        type: 'query',
+        message: extractApiError(error, 'Unable to retrieve research evidence right now.')
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const retryLastMessage = () => {
-    if (!lastUserMessage || isLoading) {
+    if (isLoading) {
       return;
     }
+
+    if (panelError?.type === 'sources' && panelError.assistantMessageId) {
+      const selectedMessage = messages.find(
+        (message) => String(message._id || '') === String(panelError.assistantMessageId)
+      );
+
+      if (selectedMessage) {
+        selectAssistantMessage(selectedMessage, panelError.citationId || null);
+        return;
+      }
+    }
+
+    if (!lastUserMessage) {
+      return;
+    }
+
     sendMessage(lastUserMessage, { retry: true });
+  };
+
+  const selectAssistantMessage = async (message, citationId = null) => {
+    if (!sessionId || message.role !== 'assistant' || !message._id) {
+      return;
+    }
+
+    const messageId = String(message._id);
+  setPanelError(null);
+    setSelectedAssistantMessage(messageId);
+
+    if (citationId?.startsWith('T')) {
+      setActiveTab('trials');
+    } else if (citationId?.startsWith('P')) {
+      setActiveTab('publications');
+    }
+
+    const cachedSources = sourcesByMessageId[messageId];
+    if (Array.isArray(cachedSources)) {
+      setSources(cachedSources, messageId);
+      return;
+    }
+
+    try {
+      const { data } = await api.get(`/sessions/${sessionId}/sources/${messageId}`);
+      setSources(data.sources || [], messageId);
+    } catch (error) {
+      setPanelError({
+        type: 'sources',
+        assistantMessageId: messageId,
+        citationId,
+        message: extractApiError(error, 'Unable to load evidence for this answer.')
+      });
+    }
   };
 
   return (
@@ -72,10 +137,16 @@ export default function ChatPanel({ className = '' }) {
         ) : null}
 
         {messages.map((message, index) => (
-          <MessageBubble key={message._id || `${message.role}-${index}`} message={message} />
+          <MessageBubble
+            key={message._id || `${message.role}-${index}`}
+            message={message}
+            isSelected={Boolean(selectedAssistantMessageId && selectedAssistantMessageId === String(message._id || ''))}
+            onSelectAssistantMessage={() => selectAssistantMessage(message)}
+            onCitationClick={(citationId) => selectAssistantMessage(message, citationId)}
+          />
         ))}
 
-        {queryError ? <ErrorBanner message={queryError} onRetry={retryLastMessage} /> : null}
+        {panelError?.message ? <ErrorBanner message={panelError.message} onRetry={retryLastMessage} /> : null}
 
         {isLoading ? (
           <LoadingOverlay message="Searching 300+ research sources..." />

@@ -23,21 +23,33 @@ const INSIGHT_ICONS = {
   GENERAL: FileText
 };
 
-function CitationTag({ id }) {
+function CitationTag({ id, onClick }) {
   const isPublication = id?.startsWith('P');
+  const className = `rounded px-1.5 py-0.5 font-mono text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+    isPublication
+      ? 'border border-blue-700 bg-blue-950 text-blue-300'
+      : 'border border-emerald-700 bg-emerald-950 text-emerald-300'
+  }`;
+
+  if (!onClick) {
+    return <span className={className}>[{id}]</span>;
+  }
 
   return (
-    <span
-      className={`rounded px-1.5 py-0.5 font-mono text-xs ${
-        isPublication ? 'border border-blue-700 bg-blue-950 text-blue-300' : 'border border-emerald-700 bg-emerald-950 text-emerald-300'
-      }`}
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick(id);
+      }}
+      className={className}
     >
       [{id}]
-    </span>
+    </button>
   );
 }
 
-export default function StructuredAnswer({ answer, retrievalStats }) {
+export default function StructuredAnswer({ answer, retrievalStats, onCitationClick }) {
   const evidenceStyle = EVIDENCE_STYLES[answer?.evidence_strength] || EVIDENCE_STYLES.MODERATE;
   const EvidenceIcon = evidenceStyle.Icon || Activity;
 
@@ -81,7 +93,7 @@ export default function StructuredAnswer({ answer, retrievalStats }) {
                       {insight.source_ids?.length ? (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {insight.source_ids.map((id) => (
-                            <CitationTag key={id} id={id} />
+                            <CitationTag key={id} id={id} onClick={onCitationClick} />
                           ))}
                         </div>
                       ) : null}
@@ -117,7 +129,7 @@ export default function StructuredAnswer({ answer, retrievalStats }) {
                   {trial.source_ids?.length ? (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {trial.source_ids.map((id) => (
-                        <CitationTag key={id} id={id} />
+                        <CitationTag key={id} id={id} onClick={onCitationClick} />
                       ))}
                     </div>
                   ) : null}

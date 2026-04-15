@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Session from '../models/Session.js';
 import Message from '../models/Message.js';
 import { runRetrievalPipeline } from '../services/pipeline/orchestrator.js';
@@ -7,9 +8,13 @@ const router = express.Router();
 
 router.post('/sessions/:id/query', async (req, res, next) => {
   try {
-    const { message } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
 
-    if (!message?.trim()) {
+    const rawMessage = typeof req.body?.message === 'string' ? req.body.message : '';
+
+    if (!rawMessage.trim()) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
@@ -19,18 +24,12 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    const cleanedMessage = message.trim();
+    const cleanedMessage = rawMessage.trim();
 
     const conversationHistory = await Message.find({ sessionId: session._id })
       .sort({ createdAt: -1 })
       .limit(12)
       .lean();
-
-    await Message.create({
-      sessionId: session._id,
-      role: 'user',
-      text: cleanedMessage
-    });
 
     const {
       responseText,
@@ -44,23 +43,71 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       sourceIndex
     } = await runRetrievalPipeline(session, cleanedMessage, conversationHistory.reverse());
 
-    const assistantMessage = await Message.create({
-      sessionId: session._id,
-      role: 'assistant',
-      text: responseText,
-      usedSourceIds: contextDocs.map((doc) => doc.id),
-      sourceIndex,
-      retrievalStats: stats,
-      intentType,
-      contextBadge,
-      structuredAnswer
-    });
+    const createMessagesAndUpdateSession = async (dbSession = null) => {
+      const writeOptions = dbSession ? { session: dbSession, ordered: true } : { ordered: true };
 
-    await Session.findByIdAndUpdate(req.params.id, {
-      $inc: { messageCount: 2 },
-      $push: { queryHistory: expandedQuery.fullQuery },
-      updatedAt: new Date()
-    });
+      const createdMessages = await Message.create(
+        [
+          {
+            sessionId: session._id,
+            role: 'user',
+            text: cleanedMessage
+          },
+          {
+            sessionId: session._id,
+            role: 'assistant',
+            text: responseText,
+            usedSourceIds: contextDocs.map((doc) => doc.id),
+            sourceIndex,
+            retrievalStats: stats,
+            intentType,
+            contextBadge,
+            structuredAnswer
+          }
+        ],
+        writeOptions
+      );
+
+      await Session.findByIdAndUpdate(
+        req.params.id,
+        {
+          $inc: { messageCount: 2 },
+          $push: {
+            queryHistory: {
+              $each: [expandedQuery.fullQuery],
+              $slice: -100
+            }
+          },
+          updatedAt: new Date()
+        },
+        writeOptions
+      );
+
+      return createdMessages?.[1] || null;
+    };
+
+    let assistantMessage = null;
+    const txnSession = await mongoose.startSession();
+    try {
+      let createdAssistantDoc = null;
+      await txnSession.withTransaction(async () => {
+        createdAssistantDoc = await createMessagesAndUpdateSession(txnSession);
+      });
+
+      assistantMessage = createdAssistantDoc?.toObject ? createdAssistantDoc.toObject() : createdAssistantDoc;
+    } catch (txnError) {
+      const unsupportedTransaction =
+        /Transaction numbers are only allowed on a replica set/i.test(txnError?.message || '');
+
+      if (!unsupportedTransaction) {
+        throw txnError;
+      }
+
+      const createdAssistantDoc = await createMessagesAndUpdateSession();
+      assistantMessage = createdAssistantDoc?.toObject ? createdAssistantDoc.toObject() : createdAssistantDoc;
+    } finally {
+      await txnSession.endSession();
+    }
 
     const idToCitation = Object.entries(sourceIndex || {}).reduce((acc, [citationId, sourceId]) => {
       if (sourceId) {

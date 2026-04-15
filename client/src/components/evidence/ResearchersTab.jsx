@@ -46,7 +46,7 @@ export default function ResearchersTab({ sources }) {
       {researcherRows.map((row) => (
         <div key={row.name} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 text-sm font-bold text-white">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-blue-600 to-cyan-500 text-sm font-bold text-white">
               {row.name.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">

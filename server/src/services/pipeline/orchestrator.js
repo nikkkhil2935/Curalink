@@ -48,16 +48,70 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
 
   const normalized = normalizeAndDeduplicate(pubmedResults, openalexResults, ctResults);
 
+  if (!normalized.length) {
+    const evidenceStrength = {
+      label: 'LIMITED',
+      emoji: 'LOW',
+      description: 'No usable evidence returned from configured retrieval sources'
+    };
+    const structuredAnswer = createNoEvidenceStructuredAnswer(session.disease, userMessage);
+    stats.rerankedTo = 0;
+    stats.timeTakenMs = Date.now() - startTime;
+
+    await Analytics.create({
+      event: 'query',
+      disease: session.disease.toLowerCase(),
+      intentType,
+      sessionId: session._id,
+      metadata: {
+        stats,
+        queryExpanded: expanded.fullQuery,
+        strategy,
+        noEvidence: true
+      }
+    }).catch((err) => {
+      console.error('Analytics logging error:', err.message);
+    });
+
+    return {
+      responseText: buildPlainTextSummary(structuredAnswer, stats),
+      structuredAnswer,
+      contextDocs: [],
+      rankedAll: [],
+      stats,
+      evidenceStrength,
+      intentType,
+      expandedQuery: expanded,
+      contextBadge,
+      sourceIndex: {}
+    };
+  }
+
   const queryTerms = expanded.fullQuery
     .split(/\s+/)
     .map((term) => term.trim())
     .filter((term) => term.length > 3);
 
   const keywordRanked = rerankCandidates(normalized, queryTerms, intentType, session.location);
-  const top100 = keywordRanked.slice(0, 100);
-  const ranked = await semanticRerank(expanded.fullQuery, top100);
+  const publicationQuota = intentType === 'CLINICAL_TRIALS' ? 35 : 55;
+  const trialQuota = intentType === 'CLINICAL_TRIALS' ? 35 : 20;
 
-  const contextDocs = selectForContext(ranked, 8, 5);
+  const topPublications = keywordRanked
+    .filter((doc) => doc.type === 'publication')
+    .slice(0, publicationQuota);
+  const topTrials = keywordRanked.filter((doc) => doc.type === 'trial').slice(0, trialQuota);
+
+  const seededPool = [...topPublications, ...topTrials];
+  const seededIds = new Set(seededPool.map((doc) => String(doc.id || doc._id)));
+  const backfill = keywordRanked
+    .filter((doc) => !seededIds.has(String(doc.id || doc._id)))
+    .slice(0, Math.max(0, 100 - seededPool.length));
+  const semanticInput = [...seededPool, ...backfill].slice(0, 100);
+
+  const ranked = await semanticRerank(expanded.fullQuery, semanticInput);
+
+  const minTrialsForContext = ctResults.length > 0 ? (intentType === 'CLINICAL_TRIALS' ? 2 : 1) : 0;
+  const contextDocs = selectForContext(ranked, 8, 5, { minTrials: minTrialsForContext });
   stats.rerankedTo = contextDocs.length;
 
   const evidenceStrength = computeEvidenceStrength(contextDocs);
@@ -108,7 +162,12 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
   let structuredAnswer;
   try {
     const llmData = await callLLM(systemPrompt, userPrompt);
-    structuredAnswer = parseLLMResponse(llmData);
+    structuredAnswer = parseLLMResponse(llmData, {
+      allowedCitationIds: Object.keys(sourceIndex || {}),
+      contextDocs,
+      disease: session.disease,
+      evidenceStrengthLabel: evidenceStrength.label
+    });
 
     const citationValidation = validateAnswerCitations(structuredAnswer, sourceIndex);
     if (!citationValidation.isValid) {
@@ -117,7 +176,7 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     structuredAnswer = citationValidation.answer;
   } catch (llmErr) {
     console.error('LLM failed, using graceful fallback:', llmErr.message);
-    structuredAnswer = createFallbackStructuredAnswer(contextDocs, session.disease, evidenceStrength);
+    structuredAnswer = createFallbackStructuredAnswer(contextDocs, session.disease, evidenceStrength, sourceIndex);
   }
 
   const responseText = buildPlainTextSummary(structuredAnswer, stats);
@@ -152,21 +211,56 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
   };
 }
 
-function createFallbackStructuredAnswer(docs, disease, evidenceStrength) {
+function createNoEvidenceStructuredAnswer(disease, userMessage) {
+  return {
+    condition_overview:
+      `No grounded evidence could be retrieved for ${disease}. Please refine the query or broaden the condition context and try again.`,
+    evidence_strength: 'LIMITED',
+    research_insights: [],
+    clinical_trials: [],
+    key_researchers: [],
+    recommendations:
+      `No source-backed answer is available for "${userMessage}" right now. Please consult your healthcare provider for personalized guidance.`,
+    follow_up_suggestions: [
+      `Can you broaden the search scope for ${disease}?`,
+      `Can you prioritize review papers or meta-analyses for ${disease}?`,
+      'Can you focus on currently recruiting clinical trials near my location?'
+    ]
+  };
+}
+
+function createFallbackStructuredAnswer(docs, disease, evidenceStrength, sourceIndex = {}) {
+  const citationEntries = Object.entries(sourceIndex || {});
+  const idToCitation = new Map(citationEntries.map(([citationId, sourceId]) => [String(sourceId), String(citationId)]));
+
+  const publicationWithCitation = docs
+    .filter((doc) => doc.type === 'publication')
+    .map((doc) => ({
+      ...doc,
+      citationId: idToCitation.get(String(doc.id || doc._id)) || null
+    }))
+    .filter((doc) => doc.citationId)
+    .slice(0, 3);
+
+  const trialsWithCitation = docs
+    .filter((doc) => doc.type === 'trial')
+    .map((doc) => ({
+      ...doc,
+      citationId: idToCitation.get(String(doc.id || doc._id)) || null
+    }))
+    .filter((doc) => doc.citationId)
+    .slice(0, 3);
+
   return {
     condition_overview: `Research analysis for ${disease} - ${docs.length} sources retrieved and ranked.`,
     evidence_strength: evidenceStrength.label,
-    research_insights: docs
-      .filter((doc) => doc.type === 'publication')
-      .slice(0, 3)
+    research_insights: publicationWithCitation
       .map((doc, index) => ({
         insight: doc.abstract?.substring(0, 150) || doc.title,
         type: 'GENERAL',
-        source_ids: [`P${index + 1}`]
+        source_ids: [doc.citationId || `P${index + 1}`]
       })),
-    clinical_trials: docs
-      .filter((doc) => doc.type === 'trial')
-      .slice(0, 3)
+    clinical_trials: trialsWithCitation
       .map((doc, index) => ({
         summary: doc.title,
         status: doc.status,
@@ -174,7 +268,7 @@ function createFallbackStructuredAnswer(docs, disease, evidenceStrength) {
         contact: doc.contacts?.[0]
           ? `${doc.contacts[0].name}${doc.contacts[0].email ? ` (${doc.contacts[0].email})` : ''}`
           : '',
-        source_ids: [`T${index + 1}`]
+        source_ids: [doc.citationId || `T${index + 1}`]
       })),
     key_researchers: [],
     recommendations:

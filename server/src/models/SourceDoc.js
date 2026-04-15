@@ -47,4 +47,8 @@ const sourceDocSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+sourceDocSchema.index({ source: 1, updatedAt: -1 });
+sourceDocSchema.index({ type: 1, updatedAt: -1 });
+sourceDocSchema.index({ timesUsed: -1 });
+
 export default mongoose.model('SourceDoc', sourceDocSchema);

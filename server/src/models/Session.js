@@ -18,12 +18,19 @@ const sessionSchema = new mongoose.Schema(
       }
     },
     title: { type: String, default: '' },
-    queryHistory: [String],
+    queryHistory: {
+      type: [String],
+      default: []
+    },
     cachedSourceIds: [String],
     messageCount: { type: Number, default: 0 }
   },
   { timestamps: true }
 );
+
+sessionSchema.index({ updatedAt: -1 });
+sessionSchema.index({ createdAt: -1 });
+sessionSchema.index({ disease: 1, updatedAt: -1 });
 
 sessionSchema.pre('save', function onPreSave(next) {
   if (!this.title) {

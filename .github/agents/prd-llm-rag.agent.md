@@ -515,8 +515,8 @@ While writing:
 7. Test fallback: send a deliberately bad LLM response and verify fallback fires
 
 After writing:
-8. Run: `uvicorn main:app --reload --port 8000` — no startup errors
-9. Run: `curl http://localhost:8000/health` — returns `{ status: ok }`
+8. Run: `uvicorn main:app --reload --port 8001` — no startup errors
+9. Run: `curl http://localhost:8001/health` — returns `{ status: ok }`
 10. Run: sample generate call with minimal payload — confirm `parsed` is not null
 11. Run: embed call with 3 texts — confirm response has `embeddings[0].length === 384`
 12. Test fallback path: pass `text: "not json at all"` to parseLLMResponse → verify fallback fires
@@ -551,8 +551,8 @@ Context budget: 8 publications (~200 tok each) + 5 trials (~150 tok each) = ~2,8
 Fallback chain: parsed → text parse → regex extract → createFallbackResponse
 
 ## Endpoint Validation
-$ curl http://localhost:8000/health → { status: ok, ollama: online, model_available: true }
-$ curl -X POST http://localhost:8000/generate -d '{"system_prompt":"...","user_prompt":"..."}' → { parsed: {...}, elapsed_seconds: 6.2 }
-$ curl -X POST http://localhost:8000/embed -d '{"texts":["lung cancer"]}' → { embeddings: [[...]], dim: 384 }
-$ curl -X POST http://localhost:8000/rerank -d '{"query":"...","documents":[...],"top_k":5}' → { ranked: [...] }
+$ curl http://localhost:8001/health → { status: ok, ollama: online, model_available: true }
+$ curl -X POST http://localhost:8001/generate -d '{"system_prompt":"...","user_prompt":"..."}' → { parsed: {...}, elapsed_seconds: 6.2 }
+$ curl -X POST http://localhost:8001/embed -d '{"texts":["lung cancer"]}' → { embeddings: [[...]], dim: 384 }
+$ curl -X POST http://localhost:8001/rerank -d '{"query":"...","documents":[...],"top_k":5}' → { ranked: [...] }
 ```

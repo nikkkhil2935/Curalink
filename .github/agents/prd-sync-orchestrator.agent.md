@@ -145,7 +145,7 @@ VALIDATION
 ──────────
 $ npm run build (client)           → 0 errors
 $ node --check src/app.js          → OK
-$ uvicorn main:app --port 8000     → startup OK
+$ uvicorn main:app --port 8001     → startup OK
 $ curl /api/health                 → { status: ok, mongodb: connected, llm: online }
 $ POST /api/sessions + query       → structuredAnswer present, sources count > 0
 $ Frontend smoke: landing → form → research interface → query → evidence panel → PDF export

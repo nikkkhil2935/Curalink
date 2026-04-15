@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { extractApiError } from '@/utils/api.js';
 
 const diseaseSuggestions = [
@@ -15,6 +15,8 @@ const diseaseSuggestions = [
 const sexOptions = ['Male', 'Female', 'Other'];
 
 export default function ContextForm({ onSubmit, onClose }) {
+  const modalRef = useRef(null);
+  const diseaseInputRef = useRef(null);
   const [form, setForm] = useState({
     disease: '',
     intent: '',
@@ -27,6 +29,54 @@ export default function ContextForm({ onSubmit, onClose }) {
   const [submitError, setSubmitError] = useState('');
 
   const canSubmit = useMemo(() => form.disease.trim().length > 0, [form.disease]);
+
+  useEffect(() => {
+    diseaseInputRef.current?.focus();
+    const modalNode = modalRef.current;
+    if (!modalNode) {
+      return undefined;
+    }
+
+    const focusableSelector = [
+      'a[href]',
+      'button:not([disabled])',
+      'textarea:not([disabled])',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])'
+    ].join(',');
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape' && !isSubmitting) {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab') {
+        return;
+      }
+
+      const focusableElements = Array.from(modalNode.querySelectorAll(focusableSelector));
+      if (!focusableElements.length) {
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    };
+
+    modalNode.addEventListener('keydown', onKeyDown);
+    return () => modalNode.removeEventListener('keydown', onKeyDown);
+  }, [isSubmitting, onClose]);
 
   const update = (key, value) => {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -62,11 +112,24 @@ export default function ContextForm({ onSubmit, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4">
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 p-6 shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !isSubmitting) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        ref={modalRef}
+        className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 p-6 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="session-context-title"
+      >
         <div className="mb-5 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold text-slate-100">Start a Research Session</h2>
+            <h2 id="session-context-title" className="text-xl font-bold text-slate-100">Start a Research Session</h2>
             <p className="mt-1 text-sm text-slate-400">Provide context so retrieval and trial matching are personalized.</p>
           </div>
           <button
@@ -83,8 +146,10 @@ export default function ContextForm({ onSubmit, onClose }) {
           {submitError ? <p className="rounded-lg border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300">{submitError}</p> : null}
 
           <div>
-            <label className="mb-1 block text-sm text-slate-300">Disease / Condition *</label>
+            <label htmlFor="context-disease" className="mb-1 block text-sm text-slate-300">Disease / Condition *</label>
             <input
+              id="context-disease"
+              ref={diseaseInputRef}
               value={form.disease}
               onChange={(event) => update('disease', event.target.value)}
               placeholder="e.g. Parkinson's Disease"
@@ -108,8 +173,9 @@ export default function ContextForm({ onSubmit, onClose }) {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm text-slate-300">What do you want to know?</label>
+            <label htmlFor="context-intent" className="mb-1 block text-sm text-slate-300">What do you want to know?</label>
             <input
+              id="context-intent"
               value={form.intent}
               onChange={(event) => update('intent', event.target.value)}
               placeholder="e.g. Deep brain stimulation outcomes"
@@ -120,8 +186,9 @@ export default function ContextForm({ onSubmit, onClose }) {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm text-slate-300">City</label>
+              <label htmlFor="context-city" className="mb-1 block text-sm text-slate-300">City</label>
               <input
+                id="context-city"
                 value={form.city}
                 onChange={(event) => update('city', event.target.value)}
                 placeholder="Toronto"
@@ -130,8 +197,9 @@ export default function ContextForm({ onSubmit, onClose }) {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm text-slate-300">Country</label>
+              <label htmlFor="context-country" className="mb-1 block text-sm text-slate-300">Country</label>
               <input
+                id="context-country"
                 value={form.country}
                 onChange={(event) => update('country', event.target.value)}
                 placeholder="Canada"
@@ -143,8 +211,9 @@ export default function ContextForm({ onSubmit, onClose }) {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm text-slate-300">Age (optional)</label>
+              <label htmlFor="context-age" className="mb-1 block text-sm text-slate-300">Age (optional)</label>
               <input
+                id="context-age"
                 type="number"
                 min="0"
                 max="120"
@@ -156,8 +225,9 @@ export default function ContextForm({ onSubmit, onClose }) {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm text-slate-300">Sex (optional)</label>
+              <label htmlFor="context-sex" className="mb-1 block text-sm text-slate-300">Sex (optional)</label>
               <select
+                id="context-sex"
                 value={form.sex}
                 onChange={(event) => update('sex', event.target.value)}
                 disabled={isSubmitting}

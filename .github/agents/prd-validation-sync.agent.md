@@ -272,20 +272,20 @@ curl -s http://localhost:5000/api/analytics/source-stats | jq '.sources[].name'
 
 Start LLM service if not running:
 ```bash
-cd llm-service && uvicorn main:app --reload --port 8000 &
+cd llm-service && uvicorn main:app --reload --port 8001 &
 sleep 5
 ```
 
 #### 4.1 Health check
 ```bash
-curl -s http://localhost:8000/health | jq .
+curl -s http://localhost:8001/health | jq .
 ```
 **Check:** `ollama: "online"` or `status: "degraded"` (not 500 error)  
 **If degraded:** Check `ollama serve` is running, check `ollama list` shows the model
 
 #### 4.2 Generate endpoint
 ```bash
-curl -s -X POST http://localhost:8000/generate \
+curl -s -X POST http://localhost:8001/generate \
   -H "Content-Type: application/json" \
   -d '{
     "system_prompt": "You are a medical assistant. Respond only with valid JSON: {\"condition_overview\": \"string\", \"evidence_strength\": \"MODERATE\", \"research_insights\": [], \"clinical_trials\": [], \"key_researchers\": [], \"recommendations\": \"Consult your healthcare provider.\", \"follow_up_suggestions\": [\"q1\", \"q2\", \"q3\"]}",
@@ -299,7 +299,7 @@ curl -s -X POST http://localhost:8000/generate \
 
 #### 4.3 Embed endpoint
 ```bash
-curl -s -X POST http://localhost:8000/embed \
+curl -s -X POST http://localhost:8001/embed \
   -H "Content-Type: application/json" \
   -d '{"texts": ["lung cancer treatment", "deep brain stimulation"]}' \
   | jq '{count, dim, first_value: .embeddings[0][0]}'
@@ -308,7 +308,7 @@ curl -s -X POST http://localhost:8000/embed \
 
 #### 4.4 Rerank endpoint
 ```bash
-curl -s -X POST http://localhost:8000/rerank \
+curl -s -X POST http://localhost:8001/rerank \
   -H "Content-Type: application/json" \
   -d '{
     "query": "lung cancer immunotherapy",

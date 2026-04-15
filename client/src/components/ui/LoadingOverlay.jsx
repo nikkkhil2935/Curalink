@@ -9,7 +9,7 @@ const DEFAULT_STEPS = [
 
 export default function LoadingOverlay({ message = 'Researching...', steps = DEFAULT_STEPS }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+    <div role="status" aria-live="polite" aria-busy="true" className="rounded-xl border border-slate-800 bg-slate-900 p-5">
       <div className="mb-4 flex items-center gap-3">
         <div className="relative">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />

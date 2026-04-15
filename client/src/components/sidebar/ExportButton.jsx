@@ -2,7 +2,7 @@ import { Download } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore.js';
 
 export default function ExportButton() {
-  const { currentSession, messages, sources } = useAppStore();
+  const { currentSession, messages, sources, selectedAssistantMessageId } = useAppStore();
 
   const handleExport = async () => {
     const { jsPDF } = await import('jspdf');
@@ -34,7 +34,12 @@ export default function ExportButton() {
     doc.line(left, y, 194, y);
     y += 8;
 
-    const lastAssistant = [...messages].reverse().find((message) => message.role === 'assistant' && message.structuredAnswer);
+    const selectedAssistant = messages.find(
+      (message) => String(message._id || '') === String(selectedAssistantMessageId || '')
+    );
+    const lastAssistant = selectedAssistant?.structuredAnswer
+      ? selectedAssistant
+      : [...messages].reverse().find((message) => message.role === 'assistant' && message.structuredAnswer);
 
     if (lastAssistant?.structuredAnswer) {
       const answer = lastAssistant.structuredAnswer;

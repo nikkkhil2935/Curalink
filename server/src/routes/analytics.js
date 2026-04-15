@@ -157,4 +157,32 @@ router.get('/trial-status', async (req, res, next) => {
   }
 });
 
+router.get('/snapshots', async (req, res, next) => {
+  try {
+    const requestedLimit = Number.parseInt(String(req.query.limit || '24'), 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 168)) : 24;
+
+    const records = await Analytics.find(
+      { event: 'system_snapshot' },
+      { metadata: 1, createdAt: 1 }
+    )
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const snapshots = records
+      .reverse()
+      .map((record) => ({
+        time: record.createdAt,
+        totalSessions: Number(record.metadata?.totalSessions || 0),
+        totalQueries: Number(record.metadata?.totalQueries || 0),
+        totalSources: Number(record.metadata?.totalSources || 0)
+      }));
+
+    return res.json({ snapshots });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 export default router;

@@ -54,7 +54,7 @@ function PublicationCard({ doc, index }) {
           <a
             href={doc.url}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="ml-auto flex items-center gap-1 rounded px-1 text-xs text-blue-300 transition hover:text-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
           >
             Open <ExternalLink size={10} />
