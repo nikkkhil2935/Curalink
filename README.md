@@ -88,6 +88,18 @@ cd ../server
 npm run check
 ```
 
+Workspace-wide context + health checks:
+
+```bash
+cd ..
+npm run context:refresh
+npm run doctor
+```
+
+- `npm run context:refresh` regenerates `PROJECT_CONTEXT.md` and `PROJECT_CONTEXT.json` from the current codebase.
+- `npm run check:integration` starts isolated local LLM + backend instances, runs a live session/query smoke test, verifies structured answer + sources, then shuts services down.
+- `npm run doctor` refreshes context, runs static checks, then runs `check:integration`.
+
 Optional 21st.dev MCP tooling (from `client`):
 
 ```bash

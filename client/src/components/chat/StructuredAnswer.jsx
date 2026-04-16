@@ -6,6 +6,51 @@ const strengthConfig = {
   STRONG: { bg: 'bg-green-950', text: 'text-green-400', emoji: '🟢' }
 };
 
+function sanitizeInsightText(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/Now provide a structured JSON response following the output format\.?/gi, '')
+    .trim();
+}
+
+function parseInsightContent(rawInsight) {
+  const insight = sanitizeInsightText(rawInsight);
+  if (!insight) {
+    return { overview: '', sources: [] };
+  }
+
+  const firstSourceIndex = insight.search(/\[(P\d+|T\d+)\]/i);
+  if (firstSourceIndex === -1) {
+    return { overview: insight, sources: [] };
+  }
+
+  const overview = insight
+    .slice(0, firstSourceIndex)
+    .replace(/SOURCES \(use ONLY these\):?/i, '')
+    .trim();
+
+  const rawSourceChunk = insight
+    .slice(firstSourceIndex)
+    .replace(/---/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const sources = rawSourceChunk
+    .split(/\s(?=\[(?:P|T)\d+\])/g)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const match = part.match(/^\[((?:P|T)\d+)\]\s*/i);
+      return {
+        id: match?.[1]?.toUpperCase() || null,
+        description: part.replace(/^\[((?:P|T)\d+)\]\s*/i, '').trim()
+      };
+    })
+    .filter((entry) => entry.description);
+
+  return { overview, sources };
+}
+
 export default function StructuredAnswer({ answer, stats }) {
   const insightIcons = {
     TREATMENT: '💊', DIAGNOSIS: '🔬', RISK: '⚠️', PREVENTION: '🛡️', GENERAL: '📋'
@@ -38,17 +83,41 @@ export default function StructuredAnswer({ answer, stats }) {
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Research Findings</h3>
           <ul className="space-y-3">
             {answer.research_insights.map((ri, i) => (
-              <li key={i} className="flex space-x-3 items-start">
+              <li key={i} className="flex space-x-3 items-start rounded-lg border border-gray-800 bg-gray-900/60 p-3">
                 <span className="text-base">{insightIcons[ri.type] || '📋'}</span>
-                <div>
-                  <p className="text-sm text-gray-200">
-                    {ri.insight}
-                    <span className="ml-2 inline-flex gap-1">
-                      {ri.source_ids?.map((id, j) => (
-                        <span key={j} className="text-xs font-mono text-blue-400">[{id}]</span>
-                      ))}
-                    </span>
-                  </p>
+                <div className="w-full space-y-2">
+                  {(() => {
+                    const parsed = parseInsightContent(ri.insight);
+                    return (
+                      <>
+                        <p className="text-sm text-gray-200 leading-relaxed wrap-break-word">
+                          {parsed.overview || sanitizeInsightText(ri.insight)}
+                        </p>
+
+                        {parsed.sources.length > 0 && (
+                          <details className="rounded-md border border-gray-800 bg-gray-950/60">
+                            <summary className="cursor-pointer list-none px-3 py-2 text-xs font-semibold text-blue-300">
+                              View source snippets ({parsed.sources.length})
+                            </summary>
+                            <ul className="space-y-2 border-t border-gray-800 px-3 py-3">
+                              {parsed.sources.map((source, idx) => (
+                                <li key={`${source.id || 'source'}-${idx}`} className="text-xs text-gray-300 leading-relaxed wrap-break-word">
+                                  <span className="mr-2 font-mono text-blue-400">[{source.id || idx + 1}]</span>
+                                  {source.description}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+
+                        <div className="inline-flex flex-wrap gap-1">
+                          {ri.source_ids?.map((id, j) => (
+                            <span key={j} className="text-xs font-mono text-blue-400">[{id}]</span>
+                          ))}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </li>
             ))}

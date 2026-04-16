@@ -15,11 +15,11 @@ const diseaseSuggestions = [
 
 const sexOptions = ['Male', 'Female', 'Other'];
 
-export default function ContextForm({ onSubmit, onClose }) {
+export default function ContextForm({ initialData = {}, onSubmit, onClose }) {
   const modalRef = useRef(null);
   const diseaseInputRef = useRef(null);
   const [form, setForm] = useState({
-    disease: '',
+    disease: initialData.disease || '',
     intent: '',
     city: '',
     country: '',

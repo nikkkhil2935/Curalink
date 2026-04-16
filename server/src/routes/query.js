@@ -35,6 +35,7 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       responseText,
       structuredAnswer,
       contextDocs,
+      evidenceDocs,
       stats,
       evidenceStrength,
       intentType,
@@ -116,7 +117,11 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       return acc;
     }, {});
 
-    const sourcesWithCitations = (contextDocs || []).map((doc) => ({
+    const sourceDocsForPanel = Array.isArray(evidenceDocs) && evidenceDocs.length
+      ? evidenceDocs
+      : (contextDocs || []);
+
+    const sourcesWithCitations = sourceDocsForPanel.map((doc) => ({
       ...doc,
       citationId: idToCitation[String(doc.id)] || null
     }));

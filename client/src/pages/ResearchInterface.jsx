@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft } from 'lucide-react';
 import ChatPanel from '@/components/chat/ChatPanel.jsx';
 import EvidencePanel from '@/components/evidence/EvidencePanel.jsx';
 import Sidebar from '@/components/sidebar/Sidebar.jsx';
@@ -11,6 +12,7 @@ import { api, extractApiError } from '@/utils/api.js';
 
 export default function ResearchInterface() {
   const { sessionId } = useParams();
+  const navigate = useNavigate();
   const { setSession, setMessages, setSources, setLoading, setSelectedAssistantMessage } = useAppStore();
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [bootstrapError, setBootstrapError] = useState('');
@@ -149,6 +151,15 @@ export default function ResearchInterface() {
   return (
     <div className="flex min-h-dvh overflow-hidden bg-gray-950 text-gray-100">
       <main className="relative flex min-h-0 flex-1 overflow-hidden bg-gray-950">
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="absolute left-3 top-3 z-30 inline-flex items-center gap-2 rounded-md border border-gray-700 bg-gray-900/90 px-3 py-1.5 text-xs font-semibold text-gray-100 shadow-md hover:border-blue-600 hover:text-blue-300"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to Home
+        </button>
+
         {sourceWarning ? (
           <div className="absolute left-1/2 top-2 z-20 w-[calc(100%-1.5rem)] max-w-2xl -translate-x-1/2 md:top-3">
             <ErrorBanner message={sourceWarning} onRetry={retryBootstrap} />

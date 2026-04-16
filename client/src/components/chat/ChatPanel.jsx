@@ -8,8 +8,17 @@ import LoadingOverlay from '../ui/LoadingOverlay';
 import ErrorBanner from '../ui/ErrorBanner';
 
 export default function ChatPanel() {
-  const { id } = useParams();
-  const { currentSession, messages, addMessage, setSources, isLoading, setLoading, error, setError } = useAppStore();
+  const { sessionId } = useParams();
+  const {
+    currentSession,
+    messages,
+    addMessage,
+    applyAssistantResponse,
+    isLoading,
+    setLoading,
+    error,
+    setError
+  } = useAppStore();
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -27,11 +36,11 @@ export default function ChatPanel() {
     setError(null);
     
     try {
-      const { data } = await api.post(`/sessions/${id}/query`, { message: userMsg });
-      addMessage(data.message);
-      if (data.sources) setSources(data.sources);
+      const { data } = await api.post(`/sessions/${sessionId}/query`, { message: text.trim() });
+      applyAssistantResponse(data.message, data.sources);
     } catch (err) {
-      setError(err.message || 'Failed to get answer');
+      const apiError = err?.response?.data?.error;
+      setError(apiError || err.message || 'Failed to get answer');
     } finally {
       setLoading(false);
     }
@@ -55,7 +64,7 @@ export default function ChatPanel() {
         <div ref={bottomRef} />
       </div>
       
-      <div className="p-4 border-t border-gray-800 bg-gray-900">
+      <div className="p-4 md:p-6 bg-gradient-to-t from-gray-950 via-gray-950/80 to-transparent backdrop-blur-sm z-10 w-full pt-12 mt-[-2rem]">
         <ChatInput onSend={handleSend} disabled={isLoading} />
       </div>
     </div>

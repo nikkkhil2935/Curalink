@@ -117,7 +117,7 @@ export default function AnalyticsDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <MotionCard delay={0.3} className="lg:col-span-2 p-6 flex flex-col">
             <h3 className="text-lg font-semibold text-white mb-6">Top Diseases Researched</h3>
-            <div className="flex-1 w-full h-[300px]">
+            <div className="flex-1 w-full h-75">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data?.diseases?.slice(0, 8) || []} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} dy={10} />
@@ -135,7 +135,7 @@ export default function AnalyticsDashboard() {
 
           <MotionCard delay={0.4} className="p-6 flex flex-col">
             <h3 className="text-lg font-semibold text-white mb-6">Query Intents</h3>
-            <div className="flex-1 w-full h-[300px]">
+            <div className="flex-1 w-full h-75">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={data?.intents || []} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="count">

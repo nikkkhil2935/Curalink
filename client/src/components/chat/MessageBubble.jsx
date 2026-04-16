@@ -6,8 +6,8 @@ export default function MessageBubble({ message }) {
   
   if (isUser) {
     return (
-      <div className="flex justify-end mb-4">
-        <div className="bg-blue-600 text-white text-sm py-2 px-4 rounded-xl max-w-[80%] break-words">
+      <div className="flex justify-end mb-6">
+        <div className="bg-[#101726] border border-[#24324A] text-gray-200 text-[15px] font-medium py-3 px-5 rounded-2xl max-w-[85%] wrap-break-word shadow-sm">
           {message.text}
         </div>
       </div>
@@ -15,11 +15,12 @@ export default function MessageBubble({ message }) {
   }
 
   return (
-    <div className="flex flex-col w-full mb-6">
+    <div className="flex flex-col w-full mb-10">
       {message.contextBadge && (
-        <span className="self-start text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+        <div className="flex items-center gap-2 self-start text-xs font-semibold text-blue-400 bg-blue-900/20 px-3 py-1 rounded-full uppercase tracking-wider mb-4 border border-blue-900/30">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
           {message.contextBadge}
-        </span>
+        </div>
       )}
       <div className="w-full text-sm text-gray-200">
         {message.structuredAnswer ? (

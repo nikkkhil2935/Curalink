@@ -15,6 +15,7 @@ export default function EvidencePanel() {
       <div className="flex overflow-x-auto border-b border-gray-800 px-2 pt-2 scrollbar-none">
         <TabButton active={activeTab === 'publications'} onClick={() => setActiveTab('publications')}>
           Publications <Badge count={pubCount} color="blue" />
+          <Pill label={`All retrieved ${pubCount}`} color="slate" />
         </TabButton>
         <TabButton active={activeTab === 'trials'} onClick={() => setActiveTab('trials')}>
           Trials <Badge count={trialCount} color="green" />
@@ -57,4 +58,13 @@ function Badge({ count, color }) {
     green: 'bg-green-900 text-green-300'
   };
   return <span className={`text-xs px-1.5 py-0.5 rounded-full ${colors[color]}`}>{count}</span>;
+}
+
+function Pill({ label, color }) {
+  if (!label) return null;
+  const colors = {
+    slate: 'bg-gray-800 text-gray-300 border-gray-700'
+  };
+
+  return <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${colors[color] || colors.slate}`}>{label}</span>;
 }

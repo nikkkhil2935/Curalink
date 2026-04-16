@@ -1,4 +1,14 @@
 {
+  "name": "curalink-workspace",
+  "private": true,
+  "scripts": {
+    "context:refresh": "node scripts/generate-project-context.mjs",
+    "check:server": "npm --prefix server run check",
+    "check:client": "npm --prefix client run check",
+    "check:llm": "python -m py_compile llm-service/main.py",
+    "check:integration": "node scripts/integration-smoke.mjs",
+    "doctor": "npm run context:refresh && npm run check:server && npm run check:client && npm run check:llm && npm run check:integration"
+  },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8"
