@@ -1,114 +1,112 @@
-import { useNavigate } from 'react-router-dom';
-import { BrainCircuit, FlaskConical, Radar, ShieldCheck, Sparkles, Workflow } from 'lucide-react';
+import React from 'react';
 import { motion } from 'framer-motion';
-import AppTopNav from '@/components/layout/AppTopNav.jsx';
-import Card from '@/components/ui/Card.jsx';
-import Button from '@/components/ui/Button.jsx';
+import { Shield, Zap, Search, Brain, Activity, Database, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import AppTopNav from '../components/layout/AppTopNav';
 
-const PLATFORM_FEATURES = [
-  {
-    title: 'Evidence-Linked Chat',
-    text: 'Every answer can be linked back to the exact publication and trial cards used to generate it.',
-    Icon: ShieldCheck
-  },
-  {
-    title: 'Hybrid Retrieval',
-    text: 'Parallel collection from PubMed, OpenAlex, and ClinicalTrials with relevance, recency, and context balancing.',
-    Icon: Radar
-  },
-  {
-    title: 'Clinical Trial Focus',
-    text: 'Trial candidates are retained through reranking and surfaced with status, location relevance, and contact details.',
-    Icon: FlaskConical
-  },
-  {
-    title: 'Structured Insights',
-    text: 'Condition overview, insights, trial opportunities, and follow-up prompts are returned in consistent schema.',
-    Icon: BrainCircuit
-  }
-];
-
-const PIPELINE_STEPS = [
-  'Intent classification and query expansion',
-  'Cross-source retrieval and deduplication',
-  'Hybrid reranking and context curation',
-  'LLM synthesis with citation alignment',
-  'Message-scoped evidence rendering'
-];
+const FeatureCard = ({ icon: Icon, title, description, delay }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true }}
+    transition={{ duration: 0.5, delay }}
+    className="bg-gray-900 rounded-2xl p-6 shadow-sm hover:bg-gray-800/80 transition-colors group"
+  >
+    <div className="h-12 w-12 rounded-xl bg-gray-800 flex items-center justify-center text-blue-400 mb-6 group-hover:scale-110 transition-transform">
+      <Icon size={24} />
+    </div>
+    <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
+    <p className="text-gray-400 leading-relaxed text-sm">
+      {description}
+    </p>
+  </motion.div>
+);
 
 export default function PlatformPage() {
-  const navigate = useNavigate();
-
   return (
-    <div className="app-shell min-h-screen px-6 py-6 text-slate-100">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <AppTopNav />
-
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="surface-panel rounded-3xl p-8"
+    <div className="min-h-screen bg-gray-950 text-gray-200 selection:bg-blue-500/30 font-sans">
+      <AppTopNav borderless />
+      
+      {/* Hero */}
+      <section className="pt-32 pb-20 px-6 max-w-7xl mx-auto text-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6 }}
         >
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-700 bg-cyan-950/30 px-3 py-1 text-xs font-semibold text-cyan-300">
-            <Sparkles size={14} />
-            Platform Overview
+          <div className="inline-flex items-center px-3 py-1 mb-8 rounded-full bg-blue-950 text-blue-400 text-sm font-medium border border-blue-900/50">
+            <Zap size={14} className="mr-2" />
+            Curalink Clinical Engine 2.0
           </div>
-
-          <h1 className="max-w-4xl text-4xl font-black leading-tight sm:text-5xl">
-            A multi-page medical evidence workspace built for grounded research decisions.
+          <h1 className="text-5xl md:text-7xl font-extrabold text-white tracking-tight leading-tight mb-6">
+            The next generation of <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">
+              precision oncology.
+            </span>
           </h1>
-          <p className="mt-4 max-w-3xl text-base text-slate-300 sm:text-lg">
-            Curalink combines retrieval rigor, structured synthesis, and transparent evidence navigation so users can move
-            from question to source-backed action quickly.
+          <p className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+            Unifying PubMed, OpenAlex, and ClinicalTrials.gov with state-of-the-art LLM synthesis. Built for researchers, clinicians, and trial navigators.
           </p>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Button size="lg" onClick={() => navigate('/')}>
-              Open Research Workspace
-            </Button>
-            <Button size="lg" variant="secondary" onClick={() => navigate('/status')}>
-              Check Live Status
-            </Button>
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <Link to="/app" className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-semibold transition-colors flex items-center">
+              Start Researching <ArrowRight size={18} className="ml-2" />
+            </Link>
+            <Link to="/status" className="bg-gray-800 hover:bg-gray-700 text-white px-6 py-3 rounded-xl font-semibold transition-colors">
+              System Status
+            </Link>
           </div>
-        </motion.section>
+        </motion.div>
+      </section>
 
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {PLATFORM_FEATURES.map((feature, index) => (
-            <motion.div
-              key={feature.title}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: 0.05 * index, ease: 'easeOut' }}
-            >
-              <Card tone="soft" className="h-full rounded-2xl p-5">
-                <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-blue-700 bg-blue-950/40 text-blue-300">
-                  <feature.Icon size={18} />
-                </div>
-                <h2 className="text-lg font-semibold text-slate-100">{feature.title}</h2>
-                <p className="mt-2 text-sm leading-relaxed text-slate-300">{feature.text}</p>
-              </Card>
-            </motion.div>
-          ))}
-        </section>
-
-        <section className="surface-soft rounded-2xl p-6">
-          <div className="mb-4 flex items-center gap-2 text-cyan-300">
-            <Workflow size={18} />
-            <h2 className="text-lg font-semibold">Pipeline Flow</h2>
-          </div>
-          <ol className="grid grid-cols-1 gap-3 md:grid-cols-5">
-            {PIPELINE_STEPS.map((step, index) => (
-              <li key={step} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-300">
-                <span className="mb-1 inline-flex rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-500">
-                  Step {index + 1}
-                </span>
-                <p>{step}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-      </div>
+      {/* Grid of Features */}
+      <section className="py-20 px-6 max-w-7xl mx-auto border-t border-gray-800/30">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <FeatureCard 
+            icon={Brain}
+            title="Semantic Synthesis"
+            description="Our custom retrieval pipeline doesn't just keyword match—it understands intent, parsing clinical context to find relevant signals."
+            delay={0.1}
+          />
+          <FeatureCard 
+            icon={Database}
+            title="Real-Time Federations"
+            description="Live API connects to PubMed, OpenAlex, and ClinicalTrials.gov, dynamically extracting cohorts, inclusion criteria, and outcomes."
+            delay={0.2}
+          />
+          <FeatureCard 
+            icon={Search}
+            title="Intelligent Reranking"
+            description="Cross-encoder semantic ranking pushes the strongest evidence to the top based on evidence strength, recency, and geographic relevance."
+            delay={0.3}
+          />
+          <FeatureCard 
+            icon={Shield}
+            title="Evidence Grounding"
+            description="No hallucinations. Every insight points back to a verifiable citation token [P1], [T2], linking you directly to the source."
+            delay={0.4}
+          />
+          <FeatureCard 
+            icon={Activity}
+            title="Clinical Trial Matching"
+            description="Our advanced geographic algorithms parse unstructured location data to connect patients with nearby recruiting phase II/III trials."
+            delay={0.5}
+          />
+          <FeatureCard 
+            icon={Zap}
+            title="Sub-second Processing"
+            description="Optimized vector lookups and streaming LLM responses ensure you get actionable clinical insights the moment you need them."
+            delay={0.6}
+          />
+        </div>
+      </section>
+      
+      {/* Footer CTA */}
+      <section className="py-24 px-6 text-center max-w-3xl mx-auto">
+        <h2 className="text-3xl font-bold text-white mb-6">Ready to accelerate discovery?</h2>
+        <Link to="/app" className="inline-flex items-center text-blue-400 hover:text-blue-300 font-medium text-lg transition-colors">
+          Open the Research Interface <ArrowRight size={20} className="ml-2" />
+        </Link>
+      </section>
     </div>
   );
 }

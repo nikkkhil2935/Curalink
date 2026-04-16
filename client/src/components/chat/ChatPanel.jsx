@@ -1,161 +1,63 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { useAppStore } from '@/store/useAppStore.js';
-import ChatInput from './ChatInput.jsx';
-import MessageBubble from './MessageBubble.jsx';
-import LoadingOverlay from '@/components/ui/LoadingOverlay.jsx';
-import ErrorBanner from '@/components/ui/ErrorBanner.jsx';
-import { api, extractApiError } from '@/utils/api.js';
+import { useAppStore } from '../../store/useAppStore';
+import { api } from '../../utils/api';
+import ChatInput from './ChatInput';
+import MessageBubble from './MessageBubble';
+import LoadingOverlay from '../ui/LoadingOverlay';
+import ErrorBanner from '../ui/ErrorBanner';
 
-export default function ChatPanel({ className = '' }) {
-  const { sessionId } = useParams();
-  const {
-    currentSession,
-    messages,
-    addMessage,
-    applyAssistantResponse,
-    isLoading,
-    setLoading,
-    sourcesByMessageId,
-    selectedAssistantMessageId,
-    setSelectedAssistantMessage,
-    setSources,
-    setActiveTab
-  } = useAppStore();
+export default function ChatPanel() {
+  const { id } = useParams();
+  const { currentSession, messages, addMessage, setSources, isLoading, setLoading, error, setError } = useAppStore();
   const bottomRef = useRef(null);
-  const [panelError, setPanelError] = useState(null);
-  const [lastUserMessage, setLastUserMessage] = useState('');
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading, panelError]);
+  }, [messages, isLoading]);
 
-  const sendMessage = async (text, { retry = false } = {}) => {
-    const trimmed = text.trim();
-    if (!trimmed || !sessionId) {
-      return;
-    }
-
-    setPanelError(null);
-    setLastUserMessage(trimmed);
-
-    if (!retry) {
-      addMessage({
-        _id: `local-user-${Date.now()}`,
-        role: 'user',
-        text: trimmed,
-        createdAt: new Date().toISOString()
-      });
-    }
-
+  const handleSend = async (text) => {
+    if (!text.trim() || isLoading) return;
+    
+    const tempId = Date.now().toString();
+    const userMsg = { role: 'user', text };
+    
+    addMessage({ ...userMsg, id: tempId });
     setLoading(true);
-
+    setError(null);
+    
     try {
-      const { data } = await api.post(`/sessions/${sessionId}/query`, { message: trimmed });
-      applyAssistantResponse(data.message, data.sources);
-    } catch (error) {
-      setPanelError({
-        type: 'query',
-        message: extractApiError(error, 'Unable to retrieve research evidence right now.')
-      });
+      const { data } = await api.post(`/sessions/${id}/query`, { message: userMsg });
+      addMessage(data.message);
+      if (data.sources) setSources(data.sources);
+    } catch (err) {
+      setError(err.message || 'Failed to get answer');
     } finally {
       setLoading(false);
     }
   };
 
-  const retryLastMessage = () => {
-    if (isLoading) {
-      return;
-    }
-
-    if (panelError?.type === 'sources' && panelError.assistantMessageId) {
-      const selectedMessage = messages.find(
-        (message) => String(message._id || '') === String(panelError.assistantMessageId)
-      );
-
-      if (selectedMessage) {
-        selectAssistantMessage(selectedMessage, panelError.citationId || null);
-        return;
-      }
-    }
-
-    if (!lastUserMessage) {
-      return;
-    }
-
-    sendMessage(lastUserMessage, { retry: true });
-  };
-
-  const selectAssistantMessage = async (message, citationId = null) => {
-    if (!sessionId || message.role !== 'assistant' || !message._id) {
-      return;
-    }
-
-    const messageId = String(message._id);
-  setPanelError(null);
-    setSelectedAssistantMessage(messageId);
-
-    if (citationId?.startsWith('T')) {
-      setActiveTab('trials');
-    } else if (citationId?.startsWith('P')) {
-      setActiveTab('publications');
-    }
-
-    const cachedSources = sourcesByMessageId[messageId];
-    if (Array.isArray(cachedSources)) {
-      setSources(cachedSources, messageId);
-      return;
-    }
-
-    try {
-      const { data } = await api.get(`/sessions/${sessionId}/sources/${messageId}`);
-      setSources(data.sources || [], messageId);
-    } catch (error) {
-      setPanelError({
-        type: 'sources',
-        assistantMessageId: messageId,
-        citationId,
-        message: extractApiError(error, 'Unable to load evidence for this answer.')
-      });
-    }
-  };
-
   return (
-    <section className={`flex h-full flex-col ${className}`}>
-      <header className="border-b border-slate-800 px-4 py-4">
-        <h2 className="text-base font-semibold text-slate-100">{currentSession?.disease || 'Research chat'}</h2>
-        <p className="mt-1 text-xs text-slate-400">
-          {(currentSession?.location?.city || 'Unknown city')}, {(currentSession?.location?.country || 'Unknown country')}
-        </p>
-      </header>
-
-      <div className="scrollbar-thin flex-1 space-y-3 overflow-y-auto px-4 py-4">
-        {messages.length === 0 ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-400">
-            Ask about treatments, diagnostic methods, side effects, or recruiting trials.
+    <div className="flex flex-col h-full bg-gray-950 relative">
+      {error && <ErrorBanner error={error} onClose={() => setError(null)} />}
+      
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages?.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
+            <h2 className="text-xl font-bold text-white">Ask anything about {currentSession?.disease || 'this topic'}</h2>
+            <p className="text-sm text-gray-400 max-w-md">Research retrieved in real-time from PubMed, OpenAlex & ClinicalTrials.gov</p>
           </div>
-        ) : null}
-
-        {messages.map((message, index) => (
-          <MessageBubble
-            key={message._id || `${message.role}-${index}`}
-            message={message}
-            isSelected={Boolean(selectedAssistantMessageId && selectedAssistantMessageId === String(message._id || ''))}
-            onSelectAssistantMessage={() => selectAssistantMessage(message)}
-            onCitationClick={(citationId) => selectAssistantMessage(message, citationId)}
-          />
-        ))}
-
-        {panelError?.message ? <ErrorBanner message={panelError.message} onRetry={retryLastMessage} /> : null}
-
-        {isLoading ? (
-          <LoadingOverlay message="Searching 300+ research sources..." />
-        ) : null}
-
+        ) : (
+          messages.map((m, i) => <MessageBubble key={m.id || i} message={m} />)
+        )}
+        
+        {isLoading && <LoadingOverlay />}
         <div ref={bottomRef} />
       </div>
-
-      <ChatInput onSend={sendMessage} disabled={isLoading} />
-    </section>
+      
+      <div className="p-4 border-t border-gray-800 bg-gray-900">
+        <ChatInput onSend={handleSend} disabled={isLoading} />
+      </div>
+    </div>
   );
 }

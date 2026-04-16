@@ -111,7 +111,7 @@ export function computeEvidenceStrength(sources) {
   if (score >= 0.65) {
     return {
       label: 'STRONG',
-      emoji: 'HIGH',
+      emoji: '🟢',
       description: 'Strong evidence from multiple recent sources'
     };
   }
@@ -119,14 +119,14 @@ export function computeEvidenceStrength(sources) {
   if (score >= 0.35) {
     return {
       label: 'MODERATE',
-      emoji: 'MED',
+      emoji: '🟡',
       description: 'Moderate evidence, consider consulting a specialist'
     };
   }
 
   return {
     label: 'LIMITED',
-    emoji: 'LOW',
+    emoji: '🔴',
     description: 'Limited evidence, emerging research area'
   };
 }

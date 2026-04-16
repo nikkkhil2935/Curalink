@@ -26,6 +26,7 @@ export default function App() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/app" element={<LandingPage />} />
         <Route path="/research/:sessionId" element={<ResearchInterface />} />
         <Route path="/analytics" element={<AnalyticsDashboard />} />
         <Route path="/platform" element={<PlatformPage />} />

@@ -1,88 +1,83 @@
-import { ExternalLink, MapPin } from 'lucide-react';
+import React from 'react';
 
-const STATUS_STYLES = {
-  RECRUITING: 'border-green-800 bg-green-950 text-green-400',
-  ACTIVE_NOT_RECRUITING: 'border-yellow-800 bg-yellow-950 text-yellow-400',
-  COMPLETED: 'border-blue-800 bg-blue-950 text-blue-400',
-  NOT_YET_RECRUITING: 'border-orange-800 bg-orange-950 text-orange-400',
-  TERMINATED: 'border-red-800 bg-red-950 text-red-400'
-};
+export default function TrialsTab({ sources }) {
+  const trials = sources.filter(s => s.type === 'trial').sort((a, b) => {
+    if (a.status === 'RECRUITING' && b.status !== 'RECRUITING') return -1;
+    if (a.status !== 'RECRUITING' && b.status === 'RECRUITING') return 1;
+    return 0;
+  });
 
-function TrialCard({ doc, index }) {
-  const statusStyle =
-    STATUS_STYLES[doc.status] || 'border-slate-700 bg-slate-900 text-slate-300';
-  const citationLabel = doc.citationId || `T${index + 1}`;
-  const eligibilityPreview = doc.eligibility ? doc.eligibility.substring(0, 150) : '';
-  const isEligibilityTruncated = Boolean(doc.eligibility && doc.eligibility.length > 150);
+  if (trials.length === 0) {
+    return <div className="text-sm text-gray-500 text-center mt-10">No clinical trials found for the current query.</div>;
+  }
+
+  const recruitingCount = trials.filter(t => t.status === 'RECRUITING').length;
 
   return (
-    <article
-      className={`rounded-xl border p-4 transition ${
-        doc.isLocationRelevant
-          ? 'border-green-800 bg-slate-900/80 shadow-sm shadow-green-950'
-          : 'border-slate-800 bg-slate-900/70 hover:border-slate-700'
-      }`}
-    >
-      <div className="mb-2 flex items-start gap-2">
-        <span className="shrink-0 rounded bg-slate-800 px-2 py-0.5 font-mono text-xs text-slate-500">[{citationLabel}]</span>
-        <span className={`shrink-0 rounded border px-2 py-0.5 text-xs ${statusStyle}`}>
-          {(doc.status || 'UNKNOWN').replace(/_/g, ' ')}
-        </span>
-        {doc.isLocationRelevant ? (
-          <span className="ml-auto shrink-0 text-xs font-medium text-green-400">Near You</span>
-        ) : null}
-      </div>
-
-      <h4 className="mb-2 text-sm font-medium leading-snug text-slate-100">{doc.title || 'Untitled trial'}</h4>
-
-      {doc.phase && doc.phase !== 'N/A' ? <p className="mb-1 text-xs text-slate-400">Phase: {doc.phase}</p> : null}
-
-      {doc.locations?.length ? (
-        <p className="mb-1 flex items-center gap-1 text-xs text-slate-400">
-          <MapPin size={10} />
-          {doc.locations.slice(0, 2).join(' | ')}
-          {doc.locations.length > 2 ? ` +${doc.locations.length - 2} more` : ''}
-        </p>
-      ) : null}
-
-      {doc.contacts?.[0] ? (
-        <p className="mb-2 text-xs text-slate-500">
-          Contact: {doc.contacts[0].name}
-          {doc.contacts[0].email ? ` - ${doc.contacts[0].email}` : ''}
-        </p>
-      ) : null}
-
-      {doc.eligibility ? (
-        <p className="mt-2 line-clamp-2 text-xs text-slate-400">
-          Eligibility: {eligibilityPreview}
-          {isEligibilityTruncated ? '...' : ''}
-        </p>
-      ) : null}
-
-      {doc.url ? (
-        <a
-          href={doc.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-3 flex items-center gap-1 rounded px-1 text-xs text-green-300 transition hover:text-green-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
-        >
-          View on ClinicalTrials.gov <ExternalLink size={10} />
-        </a>
-      ) : null}
-    </article>
+    <div className="space-y-4">
+      {recruitingCount > 0 && (
+        <div className="text-xs font-semibold text-green-400 uppercase tracking-wider mb-2">
+          🟢 Currently Recruiting ({recruitingCount})
+        </div>
+      )}
+      {trials.map((trial, i) => <TrialCard key={trial.id} trial={trial} index={i} />)}
+    </div>
   );
 }
 
-export default function TrialsTab({ sources }) {
-  if (!sources.length) {
-    return <p className="text-sm text-slate-400">No clinical trials found.</p>;
-  }
+function TrialCard({ trial, index }) {
+  const isNear = trial.isLocationRelevant;
+  const statusColors = {
+    green: 'bg-green-900 text-green-300',
+    yellow: 'bg-yellow-900 text-yellow-300',
+    blue: 'bg-blue-900 text-blue-300',
+    orange: 'bg-orange-900 text-orange-300',
+    red: 'bg-red-900 text-red-300',
+    gray: 'bg-gray-800 text-gray-300'
+  };
+
+  const statusStyle = statusColors[trial.statusColor] || statusColors.gray;
 
   return (
-    <div className="space-y-3">
-      {sources.map((doc, index) => (
-        <TrialCard key={doc.id || doc._id || `trial-${index}`} doc={doc} index={index} />
-      ))}
+    <div className={`bg-gray-900 border p-4 rounded-xl space-y-3 ${isNear ? 'border-green-600/50' : 'border-gray-800'}`}>
+      <div className="flex items-center justify-between text-xs">
+        <div className="flex space-x-2 items-center">
+          <span className="font-mono bg-gray-800 text-gray-300 px-1 rounded">[T{index + 1}]</span>
+          <span className={`px-2 py-0.5 rounded-full font-medium ${statusStyle}`}>{trial.status}</span>
+        </div>
+        {isNear && <span className="text-green-400 bg-green-950 px-2 py-0.5 rounded-full border border-green-800">📍 Near You</span>}
+      </div>
+
+      <h4 className="text-white font-bold leading-snug text-sm">{trial.title}</h4>
+      
+      <div className="flex flex-wrap gap-2 text-xs text-gray-400">
+        {trial.phase && trial.phase !== 'N/A' && <span className="bg-gray-800 px-2 py-0.5 rounded">Phase: {trial.phase}</span>}
+        {trial.locations?.length > 0 && (
+          <span className="bg-gray-800 px-2 py-0.5 rounded text-gray-300 truncate max-w-xs">
+            {trial.locations.slice(0, 2).join(' | ')}
+            {trial.locations.length > 2 && ` + ${trial.locations.length - 2} more`}
+          </span>
+        )}
+      </div>
+
+      {trial.eligibility && (
+        <p className="text-xs text-gray-400 leading-relaxed bg-gray-950 p-2 rounded">
+          {trial.eligibility.substring(0, 150)}...
+        </p>
+      )}
+
+      {trial.contacts?.length > 0 && (
+        <div className="text-xs text-gray-500 border-t border-gray-800 pt-2 flex flex-col space-y-1">
+          <span className="font-semibold">Contact:</span>
+          <span>{trial.contacts[0].name} {trial.contacts[0].email ? ` - ${trial.contacts[0].email}` : ''}</span>
+        </div>
+      )}
+
+      {trial.url && (
+        <a href={trial.url} target="_blank" rel="noopener noreferrer" className="text-xs text-green-400 hover:text-green-300 inline-block mt-1">
+          View on ClinicalTrials.gov →
+        </a>
+      )}
     </div>
   );
 }

@@ -1,147 +1,102 @@
-import { Download } from 'lucide-react';
-import { useAppStore } from '@/store/useAppStore.js';
+import React, { useState } from 'react';
+import { useAppStore } from '../../store/useAppStore.js';
+import Button from '../ui/Button.jsx';
 
 export default function ExportButton() {
-  const { currentSession, messages, sources, selectedAssistantMessageId } = useAppStore();
+  const { currentSession, messages, sources } = useAppStore();
+  const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {
-    const { jsPDF } = await import('jspdf');
-    const doc = new jsPDF();
+    if (!currentSession) return;
+    setIsExporting(true);
+    try {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF();
+      
+      const diseaseKebab = (currentSession.disease || 'research').toLowerCase().replace(/\s+/g, '-');
+      const filename = "curalink-" + diseaseKebab + ".pdf";
 
-    let y = 18;
-    const left = 16;
-    const pageWidth = 178;
+      doc.setFontSize(20);
+      doc.text("Research Brief: " + (currentSession.disease || 'N/A'), 20, 20);
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text("Generated: " + new Date().toLocaleDateString(), 20, 30);
+      const loc = [currentSession.location?.city, currentSession.location?.country].filter(Boolean).join(', ');
+      if (loc) doc.text("Location Context: " + loc, 20, 36);
 
-    doc.setFontSize(18);
-    doc.setTextColor(37, 99, 235);
-    doc.text('Curalink Research Brief', left, y);
-    y += 10;
+      const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.structuredAnswer);
+      const lastAnswer = lastAssistant?.structuredAnswer;
+      
+      let yPos = 50;
 
-    doc.setFontSize(10);
-    doc.setTextColor(71, 85, 105);
-    doc.text(`Disease: ${currentSession?.disease || 'N/A'}`, left, y);
-    y += 5;
-    doc.text(
-      `Location: ${currentSession?.location?.city || 'Unknown city'}, ${currentSession?.location?.country || 'Unknown country'}`,
-      left,
-      y
-    );
-    y += 5;
-    doc.text(`Generated: ${new Date().toLocaleString()}`, left, y);
-    y += 8;
-
-    doc.setDrawColor(148, 163, 184);
-    doc.line(left, y, 194, y);
-    y += 8;
-
-    const selectedAssistant = messages.find(
-      (message) => String(message._id || '') === String(selectedAssistantMessageId || '')
-    );
-    const lastAssistant = selectedAssistant?.structuredAnswer
-      ? selectedAssistant
-      : [...messages].reverse().find((message) => message.role === 'assistant' && message.structuredAnswer);
-
-    if (lastAssistant?.structuredAnswer) {
-      const answer = lastAssistant.structuredAnswer;
-
-      const writeSection = (title, text, fontSize = 10) => {
-        if (y > 260) {
-          doc.addPage();
-          y = 18;
-        }
-
-        doc.setFontSize(12);
-        doc.setTextColor(15, 23, 42);
-        doc.text(title, left, y);
-        y += 5;
-
-        doc.setFontSize(fontSize);
-        doc.setTextColor(51, 65, 85);
-        const lines = doc.splitTextToSize(text || '', pageWidth);
-        doc.text(lines, left, y);
-        y += lines.length * 5 + 4;
-      };
-
-      writeSection('Condition overview', answer.condition_overview || '');
-
-      if (answer.research_insights?.length) {
-        if (y > 245) {
-          doc.addPage();
-          y = 18;
-        }
-        doc.setFontSize(12);
-        doc.setTextColor(15, 23, 42);
-        doc.text('Research findings', left, y);
-        y += 6;
-        answer.research_insights.slice(0, 5).forEach((insight, index) => {
-          const lines = doc.splitTextToSize(`${index + 1}. ${insight.insight}`, pageWidth);
+      if (lastAnswer) {
+        if (lastAnswer.condition_overview) {
+          doc.setFontSize(14);
+          doc.setTextColor(0);
+          doc.text('Overview', 20, yPos);
+          yPos += 8;
           doc.setFontSize(10);
-          doc.setTextColor(51, 65, 85);
-          doc.text(lines, left, y);
-          y += lines.length * 4.5 + 2;
+          doc.setTextColor(60);
+          let splitText = doc.splitTextToSize(lastAnswer.condition_overview || '', 170);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5 + 10;
+        }
+
+        if (lastAnswer.research_insights?.length > 0) {
+          if (yPos > 250) { doc.addPage(); yPos = 20; }
+          doc.setFontSize(14);
+          doc.setTextColor(0);
+          doc.text('Key Research Findings', 20, yPos);
+          yPos += 8;
+          
+          lastAnswer.research_insights.slice(0, 5).forEach((insight) => {
+            if (yPos > 270) { doc.addPage(); yPos = 20; }
+            doc.setFontSize(10);
+            doc.setTextColor(0);
+            const text = "• [" + insight.type + "] " + insight.insight;
+            const splitText = doc.splitTextToSize(text, 170);
+            doc.text(splitText, 20, yPos);
+            yPos += splitText.length * 5 + 4;
+          });
+          yPos += 6;
+        }
+      }
+
+      if (sources && sources.length > 0) {
+        if (yPos > 250) { doc.addPage(); yPos = 20; }
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text('Sources', 20, yPos);
+        yPos += 8;
+
+        sources.slice(0, 8).forEach((src, idx) => {
+          if (yPos > 270) { doc.addPage(); yPos = 20; }
+          doc.setFontSize(10);
+          doc.setTextColor(60);
+          const title = src.title || 'Untitled document';
+          const srcText = (idx + 1) + ". [" + src.source + "] " + title + " (" + (src.year || 'N/A') + ")";
+          const splitSrc = doc.splitTextToSize(srcText, 170);
+          doc.text(splitSrc, 20, yPos);
+          yPos += splitSrc.length * 5 + 3;
         });
       }
 
-      if (answer.recommendations) {
-        writeSection('Guidance', answer.recommendations);
-      }
+      doc.save(filename);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    } finally {
+      setIsExporting(false);
     }
-
-    if (sources.length) {
-      if (y > 240) {
-        doc.addPage();
-        y = 18;
-      }
-
-      doc.setFontSize(12);
-      doc.setTextColor(15, 23, 42);
-      doc.text('Research sources', left, y);
-      y += 6;
-
-      let publicationCount = 0;
-      let trialCount = 0;
-
-      sources.slice(0, 8).forEach((source) => {
-        if (y > 265) {
-          doc.addPage();
-          y = 18;
-        }
-
-        let sourceLabel = source.citationId;
-        if (!sourceLabel) {
-          if (source.type === 'publication') {
-            publicationCount += 1;
-            sourceLabel = `P${publicationCount}`;
-          } else {
-            trialCount += 1;
-            sourceLabel = `T${trialCount}`;
-          }
-        }
-        const titleLines = doc.splitTextToSize(`[${sourceLabel}] ${source.title || 'Untitled source'}`, pageWidth);
-        doc.setFontSize(10);
-        doc.setTextColor(51, 65, 85);
-        doc.text(titleLines, left, y);
-        y += titleLines.length * 4.5 + 1;
-
-        if (source.url) {
-          doc.setTextColor(59, 130, 246);
-          doc.text(source.url, left + 2, y);
-          y += 4.5;
-        }
-      });
-    }
-
-    doc.save(`curalink-${(currentSession?.disease || 'research').replace(/\s+/g, '-').toLowerCase()}.pdf`);
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleExport}
-      className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-800 bg-blue-950 px-4 py-2 text-sm font-medium text-blue-300 transition hover:border-blue-600 hover:text-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+    <Button 
+      variant="outline" 
+      onClick={handleExport} 
+      disabled={isExporting || !currentSession}
+      className="w-full"
     >
-      <Download size={14} />
-      Export research brief
-    </button>
+      {isExporting ? 'Generating PDF...' : 'Export Research Brief PDF'}
+    </Button>
   );
 }

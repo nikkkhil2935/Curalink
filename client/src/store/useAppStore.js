@@ -9,8 +9,10 @@ export const useAppStore = create((set, get) => ({
   isLoading: false,
   activeTab: 'publications',
   showContextForm: false,
+  error: null,
 
   setSession: (session) => set({ currentSession: session }),
+  setError: (error) => set({ error }),
   addMessage: (message) =>
     set((state) => ({
       messages: [...state.messages, message]
@@ -79,6 +81,7 @@ export const useAppStore = create((set, get) => ({
       selectedAssistantMessageId: null,
       isLoading: false,
       activeTab: 'publications',
-      showContextForm: false
+      showContextForm: false,
+      error: null
     })
 }));

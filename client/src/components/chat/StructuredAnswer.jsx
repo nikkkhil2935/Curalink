@@ -1,164 +1,89 @@
-import {
-  Activity,
-  AlertTriangle,
-  FileText,
-  Microscope,
-  Pill,
-  Shield,
-  ShieldAlert,
-  ShieldCheck
-} from 'lucide-react';
+import React from 'react';
 
-const EVIDENCE_STYLES = {
-  STRONG: { color: 'text-emerald-400', bg: 'bg-emerald-950 border-emerald-800', Icon: ShieldCheck },
-  MODERATE: { color: 'text-amber-400', bg: 'bg-amber-950 border-amber-800', Icon: Shield },
-  LIMITED: { color: 'text-rose-400', bg: 'bg-rose-950 border-rose-800', Icon: ShieldAlert }
+const strengthConfig = {
+  LIMITED: { bg: 'bg-red-950', text: 'text-red-400', emoji: '🔴' },
+  MODERATE: { bg: 'bg-yellow-950', text: 'text-yellow-400', emoji: '🟡' },
+  STRONG: { bg: 'bg-green-950', text: 'text-green-400', emoji: '🟢' }
 };
 
-const INSIGHT_ICONS = {
-  TREATMENT: Pill,
-  DIAGNOSIS: Microscope,
-  RISK: AlertTriangle,
-  PREVENTION: Shield,
-  GENERAL: FileText
-};
-
-function CitationTag({ id, onClick }) {
-  const isPublication = id?.startsWith('P');
-  const className = `rounded px-1.5 py-0.5 font-mono text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
-    isPublication
-      ? 'border border-blue-700 bg-blue-950 text-blue-300'
-      : 'border border-emerald-700 bg-emerald-950 text-emerald-300'
-  }`;
-
-  if (!onClick) {
-    return <span className={className}>[{id}]</span>;
-  }
+export default function StructuredAnswer({ answer, stats }) {
+  const insightIcons = {
+    TREATMENT: '💊', DIAGNOSIS: '🔬', RISK: '⚠️', PREVENTION: '🛡️', GENERAL: '📋'
+  };
+  
+  const evidence = strengthConfig[answer.evidence_strength] || strengthConfig.MODERATE;
 
   return (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick(id);
-      }}
-      className={className}
-    >
-      [{id}]
-    </button>
-  );
-}
-
-export default function StructuredAnswer({ answer, retrievalStats, onCitationClick }) {
-  const evidenceStyle = EVIDENCE_STYLES[answer?.evidence_strength] || EVIDENCE_STYLES.MODERATE;
-  const EvidenceIcon = evidenceStyle.Icon || Activity;
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/80">
-      <div className={`flex items-center justify-between border-b border-slate-800 px-4 py-2 ${evidenceStyle.bg}`}>
-        <span className={`inline-flex items-center gap-2 text-xs font-medium ${evidenceStyle.color}`}>
-          <EvidenceIcon className="h-4 w-4" aria-hidden="true" />
-          {answer?.evidence_strength || 'MODERATE'} evidence
+    <div className="flex flex-col space-y-4 w-full">
+      <div className="flex items-center justify-between text-xs py-2 px-3 bg-gray-900 border border-gray-800 rounded-lg">
+        <span className={`font-medium px-2 py-0.5 rounded ${evidence.bg} ${evidence.text}`}>
+          {evidence.emoji} {answer.evidence_strength} EVIDENCE
         </span>
-        {retrievalStats ? (
-          <span className="text-[11px] text-slate-400">
-            {retrievalStats.totalCandidates ?? 0} candidates → {retrievalStats.rerankedTo ?? 0} shown
+        {stats && (
+          <span className="text-gray-500 font-mono">
+            {stats.totalCandidates} candidates &rarr; {stats.rerankedTo} shown
           </span>
-        ) : null}
+        )}
       </div>
 
-      <div className="space-y-4 p-4">
-        {answer?.condition_overview ? (
-          <section>
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Overview</p>
-            <p className="text-sm leading-relaxed text-slate-100">{answer.condition_overview}</p>
-          </section>
-        ) : null}
+      {answer.condition_overview && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Overview</h3>
+          <p className="text-sm text-gray-200 leading-relaxed">{answer.condition_overview}</p>
+        </section>
+      )}
 
-        {answer?.research_insights?.length ? (
-          <section>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Research findings</p>
-            <div className="space-y-2">
-              {answer.research_insights.map((insight, index) => (
-                <div key={`${insight.insight}-${index}`} className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                  <div className="flex items-start gap-2">
-                    <span className="mt-0.5 shrink-0 text-slate-300">
-                      {(() => {
-                        const Icon = INSIGHT_ICONS[insight.type] || FileText;
-                        return <Icon className="h-4 w-4" aria-hidden="true" />;
-                      })()}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm leading-relaxed text-slate-100">{insight.insight}</p>
-                      {insight.source_ids?.length ? (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {insight.source_ids.map((id) => (
-                            <CitationTag key={id} id={id} onClick={onCitationClick} />
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {answer?.clinical_trials?.length ? (
-          <section>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Clinical trials</p>
-            <div className="space-y-2">
-              {answer.clinical_trials.map((trial, index) => (
-                <div
-                  key={`${trial.summary}-${index}`}
-                  className={`rounded-xl border p-3 ${trial.location_relevant ? 'border-emerald-800 bg-emerald-950/30' : 'border-slate-800 bg-slate-950/40'}`}
-                >
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-300">
-                      {trial.status || 'UNKNOWN'}
-                    </span>
-                    {trial.location_relevant ? (
-                      <span className="rounded-full border border-emerald-700 bg-emerald-950 px-2 py-0.5 text-[11px] text-emerald-300">
-                        Near you
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="text-sm leading-relaxed text-slate-100">{trial.summary}</p>
-                  {trial.contact ? <p className="mt-1 text-xs text-slate-400">Contact: {trial.contact}</p> : null}
-                  {trial.source_ids?.length ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {trial.source_ids.map((id) => (
-                        <CitationTag key={id} id={id} onClick={onCitationClick} />
+      {answer.research_insights?.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Research Findings</h3>
+          <ul className="space-y-3">
+            {answer.research_insights.map((ri, i) => (
+              <li key={i} className="flex space-x-3 items-start">
+                <span className="text-base">{insightIcons[ri.type] || '📋'}</span>
+                <div>
+                  <p className="text-sm text-gray-200">
+                    {ri.insight}
+                    <span className="ml-2 inline-flex gap-1">
+                      {ri.source_ids?.map((id, j) => (
+                        <span key={j} className="text-xs font-mono text-blue-400">[{id}]</span>
                       ))}
-                    </div>
-                  ) : null}
+                    </span>
+                  </p>
                 </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
-        {answer?.key_researchers?.length ? (
-          <section>
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Key researchers</p>
-            <div className="flex flex-wrap gap-2">
-              {answer.key_researchers.map((researcher) => (
-                <span key={researcher} className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs text-slate-300">
-                  {researcher}
-                </span>
-              ))}
-            </div>
-          </section>
-        ) : null}
+      {answer.clinical_trials?.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Clinical Trials</h3>
+          <div className="space-y-2">
+            {answer.clinical_trials.map((ct, i) => (
+              <div key={i} className="p-3 border border-gray-800 bg-gray-900 rounded-lg text-sm">
+                <div className="flex items-center justify-between mb-1">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ct.status === 'RECRUITING' ? 'bg-green-950 text-green-400' : 'bg-gray-800 text-gray-400'}`}>
+                    {ct.status}
+                  </span>
+                  {ct.location_relevant && <span className="text-xs text-green-400 bg-green-950 px-2 py-0.5 rounded-full">📍 Near You</span>}
+                </div>
+                <p className="text-gray-200 mb-1">{ct.summary}</p>
+                {ct.contact && <p className="text-xs text-gray-500 border-t border-gray-800 pt-1">Contact: {ct.contact}</p>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
-        {answer?.recommendations ? (
-          <section className="rounded-xl border border-blue-900/60 bg-blue-950/20 p-3">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-blue-400">Guidance</p>
-            <p className="text-sm leading-relaxed text-slate-200">{answer.recommendations}</p>
-          </section>
-        ) : null}
-      </div>
+      {answer.recommendations && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Guidance</h3>
+          <div className="bg-blue-950/30 border border-blue-900 p-3 rounded-lg text-sm text-blue-200 leading-relaxed">
+            {answer.recommendations}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

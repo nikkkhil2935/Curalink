@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { Search, Database, Layers, ArrowRight, Clock, Clock3, Activity } from 'lucide-react';
 import ContextForm from '@/components/ContextForm.jsx';
 import ErrorBanner from '@/components/ui/ErrorBanner.jsx';
 import Button from '@/components/ui/Button.jsx';
-import Card from '@/components/ui/Card.jsx';
 import MagicBackdrop from '@/components/ui/MagicBackdrop.jsx';
 import AppTopNav from '@/components/layout/AppTopNav.jsx';
 import { api, extractApiError } from '@/utils/api.js';
+import { cn } from '@/lib/utils.js';
 
 export default function LandingPage() {
   const [showForm, setShowForm] = useState(false);
@@ -17,21 +18,14 @@ export default function LandingPage() {
   const [reloadSessionsToken, setReloadSessionsToken] = useState(0);
   const navigate = useNavigate();
 
-  const reloadSessions = () => {
-    setReloadSessionsToken((previous) => previous + 1);
-  };
+  const reloadSessions = () => setReloadSessionsToken((prev) => prev + 1);
 
   useEffect(() => {
     let isMounted = true;
-
     setSessionLoadError('');
-
-    api
-      .get('/sessions')
+    api.get('/sessions')
       .then(({ data }) => {
-        if (isMounted) {
-          setRecentSessions(data.sessions || []);
-        }
+        if (isMounted) setRecentSessions(data.sessions || []);
       })
       .catch((error) => {
         if (isMounted) {
@@ -39,146 +33,165 @@ export default function LandingPage() {
           setRecentSessions([]);
         }
       });
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [reloadSessionsToken]);
 
   const handleStartResearch = async (formData) => {
     setStartError('');
-
     try {
       const { data } = await api.post('/sessions', formData);
       navigate(`/research/${data.session._id}`);
     } catch (error) {
       const message = extractApiError(error, 'Failed to start research session.');
       setStartError(message);
-      throw error;
     }
   };
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } }
+  };
+
   return (
-    <div className="app-shell relative min-h-screen bg-transparent px-6 py-10 text-slate-100">
+    <div className="app-shell relative min-h-screen bg-[#070a12] text-[#f3f7ff]">
       <MagicBackdrop />
+      <AppTopNav className="bg-[#101726]/80" />
 
-      <div className="relative mx-auto max-w-6xl">
-        <AppTopNav className="mb-6" />
-
-        <motion.header
-          className="surface-panel rounded-3xl px-8 py-12 backdrop-blur"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: 'easeOut' }}
+      <main className="relative mx-auto flex max-w-7xl flex-col px-4 pt-16 pb-24 sm:px-6 lg:px-8">
+        <motion.div 
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="grid gap-12 lg:grid-cols-2 lg:gap-8 xl:gap-16"
         >
-          <div className="mb-5">
-            <div className="brand-badge inline-flex rounded-full px-4 py-1 text-xs font-semibold uppercase tracking-[0.14em]">
-              AI Medical Research Assistant
-            </div>
-          </div>
-          <h1 className="max-w-3xl text-4xl font-black leading-tight sm:text-5xl">
-            Curalink turns scattered medical studies into traceable evidence answers.
-          </h1>
-          <p className="mt-4 max-w-3xl text-base text-slate-300 sm:text-lg">
-            Multi-source retrieval from PubMed, OpenAlex and ClinicalTrials.gov with source-linked responses and placeholder hooks for advanced ranking.
-          </p>
-
-          <div className="mt-7 flex flex-wrap gap-3">
-            <Button
-              onClick={() => {
-                setStartError('');
-                setShowForm(true);
-              }}
-              size="lg"
-              variant="primary"
-              className="px-6"
-            >
-              Start Research
-            </Button>
-            <Button
-              onClick={() => navigate('/analytics')}
-              size="lg"
-              variant="secondary"
-              className="px-6"
-            >
-              View Analytics
-            </Button>
-            <Button
-              onClick={() => navigate('/platform')}
-              size="lg"
-              variant="ghost"
-              className="px-6"
-            >
-              Explore Platform
-            </Button>
-            <Button
-              onClick={() => navigate('/status')}
-              size="lg"
-              variant="ghost"
-              className="px-6"
-            >
-              Live Status
-            </Button>
+          {/* Left Column: Hero */}
+          <div className="flex flex-col justify-center pt-8">
+            <motion.div variants={itemVariants} className="mb-6 inline-flex border border-blue-900/50 bg-blue-900/20 px-3 py-1 rounded-full items-center gap-2 text-xs font-semibold uppercase tracking-widest text-blue-400 w-max">
+              <Activity className="h-4 w-4" />
+              AI Medical Intelligence
+            </motion.div>
+            
+            <motion.h1 variants={itemVariants} className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl lg:text-6xl text-balance leading-[1.1]">
+              Traceable evidence for clinical curations.
+            </motion.h1>
+            
+            <motion.p variants={itemVariants} className="mt-6 text-lg leading-relaxed text-[#8ea1c2] max-w-2xl">
+              Curalink turns scattered medical studies into highly structured, actionable intelligence. Multi-source retrieval from PubMed, OpenAlex and ClinicalTrials.gov directly mapped to source citations.
+            </motion.p>
+            
+            <motion.div variants={itemVariants} className="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center">
+              <Button
+                onClick={() => { setStartError(''); setShowForm(true); }}
+                size="lg"
+                variant="primary"
+                className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-base px-8 h-14 rounded-xl flex items-center justify-center gap-2 border-none shadow-[0_0_20px_rgba(37,99,235,0.2)]"
+              >
+                Start Research
+                <ArrowRight className="h-5 w-5" />
+              </Button>
+              <Button
+                onClick={() => navigate('/platform')}
+                size="lg"
+                variant="secondary"
+                className="bg-[#131d2d] text-[#c6d3eb] border-[#24324a] hover:bg-[#1a263a] hover:text-white px-8 h-14 rounded-xl flex items-center justify-center font-medium"
+              >
+                Platform Specs
+              </Button>
+            </motion.div>
+            
+            {startError && (
+              <motion.div variants={itemVariants} className="mt-6">
+                <ErrorBanner message={startError} />
+              </motion.div>
+            )}
           </div>
 
-          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatCard index={0} label="Sources" value="3 APIs" />
-            <StatCard index={1} label="Candidate depth" value="300-500" />
-            <StatCard index={2} label="Default model" value="Llama 3.1 8B" />
+          {/* Right Column: Key Stats / Features & Recent Sessions */}
+          <div className="flex flex-col gap-6 lg:pt-16">
+            <motion.div variants={itemVariants} className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col border border-[#24324a] bg-[#101726]/60 backdrop-blur rounded-2xl p-5 shadow-sm">
+                <Database className="h-6 w-6 text-blue-400 mb-4 opacity-80" />
+                <span className="text-2xl font-bold text-white mb-1">3 APIs</span>
+                <span className="text-xs uppercase tracking-wider text-[#8ea1c2] mt-auto">Source Diversity</span>
+              </div>
+              <div className="flex flex-col border border-[#24324a] bg-[#101726]/60 backdrop-blur rounded-2xl p-5 shadow-sm">
+                <Layers className="h-6 w-6 text-blue-400 mb-4 opacity-80" />
+                <span className="text-2xl font-bold text-white mb-1">500+</span>
+                <span className="text-xs uppercase tracking-wider text-[#8ea1c2] mt-auto">Candidates Scored</span>
+              </div>
+            </motion.div>
+
+            <motion.section variants={itemVariants} className="border border-[#24324a] bg-[#0a0f1e]/80 backdrop-blur rounded-2xl p-6 mt-2 flex flex-col min-h-[300px]">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#24324a]">
+                <div className="flex items-center gap-2 text-white font-semibold flex-1">
+                  <Clock3 className="h-5 w-5 text-[#8ea1c2]" />
+                  <h2>Recent Queries</h2>
+                </div>
+                <span className="text-xs font-medium text-[#8ea1c2] bg-[#131d2d] px-2 py-1 rounded-md">
+                  History
+                </span>
+              </div>
+
+              {sessionLoadError ? (
+                <div className="mb-4"><ErrorBanner message={sessionLoadError} onRetry={reloadSessions} /></div>
+              ) : null}
+
+              {recentSessions.length === 0 && !sessionLoadError ? (
+                <div className="flex flex-col items-center justify-center text-center p-8 m-auto text-[#8ea1c2] border border-dashed border-[#24324a] rounded-xl bg-[#101726]/50">
+                  <Search className="h-8 w-8 mb-3 opacity-50" />
+                  <p className="text-sm font-medium">No sessions found.</p>
+                  <p className="text-xs mt-1 text-[#8ea1c2]/70">Initiate your first query to build history.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3 overflow-y-auto pr-2 scrollbar-thin max-h-[350px]">
+                  {recentSessions.map((session) => (
+                    <button
+                      key={session._id}
+                      onClick={() => navigate(`/research/${session._id}`)}
+                      className="group flex flex-col border border-[#1a263a] bg-[#131d2d]/80 rounded-xl p-4 text-left transition-all hover:bg-[#1a263a] hover:border-blue-500/40"
+                    >
+                      <div className="flex items-start justify-between gap-4 mb-2">
+                        <h3 className="font-semibold text-white group-hover:text-blue-300 transition-colors line-clamp-1">
+                          {session.title || session.disease}
+                        </h3>
+                        <span className="text-xs text-[#8ea1c2] whitespace-nowrap bg-[#070a12] px-2 py-0.5 rounded">
+                          {session.messageCount || 0} msg
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-[#8ea1c2]">
+                        <span className="truncate max-w-[180px]">
+                          {session.location?.city || 'Unknown'}, {session.location?.country || 'Unknown'}
+                        </span>
+                        <span className="w-1 h-1 rounded-full bg-[#24324a]"></span>
+                        <span className="text-blue-400">
+                          {session.intent || 'General Inquiry'}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </motion.section>
           </div>
+        </motion.div>
+      </main>
 
-          {startError ? <div className="mt-6"><ErrorBanner message={startError} /></div> : null}
-        </motion.header>
-
-        <motion.section
-          className="surface-soft mt-8 rounded-2xl p-6"
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.08, ease: 'easeOut' }}
-        >
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Recent Sessions</h2>
-            <span className="text-xs text-slate-400">Latest 10</span>
-          </div>
-
-          {sessionLoadError ? <div className="mb-4"><ErrorBanner message={sessionLoadError} onRetry={reloadSessions} /></div> : null}
-
-          {recentSessions.length === 0 ? (
-            <p className="text-sm text-slate-400">No sessions yet. Start your first research session.</p>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {recentSessions.map((session) => (
-                <button
-                  key={session._id}
-                  onClick={() => navigate(`/research/${session._id}`)}
-                  className="surface-soft rounded-xl p-4 text-left transition hover:-translate-y-0.5 hover:border-slate-600"
-                >
-                  <p className="font-medium text-slate-100">{session.title || session.disease}</p>
-                  <p className="mt-1 text-sm text-slate-400">{session.location?.city || 'Unknown city'}, {session.location?.country || 'Unknown country'}</p>
-                  <p className="mt-2 text-xs text-slate-500">Messages: {session.messageCount || 0}</p>
-                </button>
-              ))}
-            </div>
-          )}
-        </motion.section>
-      </div>
-
-      {showForm ? <ContextForm onSubmit={handleStartResearch} onClose={() => setShowForm(false)} /> : null}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#070a12]/80 backdrop-blur-sm px-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-xl mx-auto border border-[#24324a] bg-[#101726] rounded-2xl shadow-2xl relative overflow-hidden"
+          >
+            <ContextForm onSubmit={handleStartResearch} onClose={() => setShowForm(false)} />
+          </motion.div>
+        </div>
+      )}
     </div>
-  );
-}
-
-function StatCard({ label, value, index = 0 }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: 0.12 + index * 0.06, ease: 'easeOut' }}
-    >
-      <Card tone="soft" padding="sm" className="rounded-xl">
-        <p className="text-xl font-bold text-blue-300">{value}</p>
-        <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">{label}</p>
-      </Card>
-    </motion.div>
   );
 }

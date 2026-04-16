@@ -256,26 +256,22 @@ app.get('/api/health', async (req, res) => {
         ? health.effective_generation_provider
         : null;
 
-      if (effectiveProvider === 'local' && localAvailable) {
-        llmProvider = 'local';
-        llmQuality = 'degraded';
-        llmStatus = 'degraded';
-      } else if (effectiveProvider === 'groq' && groqConfigured) {
-        llmProvider = 'groq';
-        llmQuality = 'full';
+      const hasFullProvider = (ollamaOnline && ollamaModelAvailable) || groqConfigured;
+
+      // Service health should reflect currently available full providers, not only the last used provider.
+      if (hasFullProvider) {
         llmStatus = 'online';
-      } else if (effectiveProvider === 'ollama' && ollamaOnline && ollamaModelAvailable) {
-        llmProvider = 'ollama';
         llmQuality = 'full';
-        llmStatus = 'online';
-      } else if (ollamaOnline && ollamaModelAvailable) {
-        llmProvider = 'ollama';
-        llmQuality = 'full';
-        llmStatus = 'online';
-      } else if (groqConfigured) {
-        llmProvider = 'groq';
-        llmQuality = 'full';
-        llmStatus = 'online';
+
+        if (effectiveProvider === 'ollama' && ollamaOnline && ollamaModelAvailable) {
+          llmProvider = 'ollama';
+        } else if (effectiveProvider === 'groq' && groqConfigured) {
+          llmProvider = 'groq';
+        } else if (ollamaOnline && ollamaModelAvailable) {
+          llmProvider = 'ollama';
+        } else {
+          llmProvider = 'groq';
+        }
       } else if (localAvailable) {
         llmProvider = 'local';
         llmQuality = 'degraded';

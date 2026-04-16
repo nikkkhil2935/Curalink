@@ -1,71 +1,77 @@
-import { useMemo } from 'react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import React from 'react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, Cell } from 'recharts';
 
 export default function TimelineTab({ sources }) {
-  const chartData = useMemo(() => {
-    const countsByYear = new Map();
-
-    sources.forEach((source) => {
-      if (!source.year) {
-        return;
-      }
-
-      countsByYear.set(source.year, (countsByYear.get(source.year) || 0) + 1);
-    });
-
-    return Array.from(countsByYear.entries())
-      .map(([year, count]) => ({ year, count }))
-      .sort((a, b) => a.year - b.year);
-  }, [sources]);
-
-  if (!chartData.length) {
-    return <p className="text-sm text-slate-400">Timeline will render once publication years are available.</p>;
+  const pubs = sources.filter(s => s.type === 'publication' && s.year >= 2010);
+  
+  if (pubs.length === 0) {
+    return <div className="text-sm text-gray-500 text-center mt-10">Publication timeline will appear after your first query.</div>;
   }
 
+  const counts = {};
+  pubs.forEach(p => counts[p.year] = (counts[p.year] || 0) + 1);
+
+  const data = Object.keys(counts).sort().map(y => ({
+    year: parseInt(y),
+    count: counts[y]
+  }));
+
   const currentYear = new Date().getFullYear();
-  const recentYears = chartData.filter((entry) => entry.year >= currentYear - 3);
-  const olderYears = chartData.filter((entry) => entry.year < currentYear - 3 && entry.year >= currentYear - 6);
-  const recentAverage = recentYears.reduce((sum, entry) => sum + entry.count, 0) / Math.max(recentYears.length, 1);
-  const olderAverage = olderYears.reduce((sum, entry) => sum + entry.count, 0) / Math.max(olderYears.length, 1);
-  const momentum = recentAverage > olderAverage * 1.2 ? 'Accelerating' : recentAverage > olderAverage * 0.8 ? 'Stable' : 'Cooling';
+  const recentAvg = data.filter(d => d.year >= currentYear - 3).reduce((a, b) => a + b.count, 0) / 3 || 0;
+  const olderAvg = data.filter(d => d.year >= currentYear - 6 && d.year < currentYear - 3).reduce((a, b) => a + b.count, 0) / 3 || 0;
+  
+  let momentum = "Stable 📊";
+  if (olderAvg > 0) {
+    const ratio = recentAvg / olderAvg;
+    if (ratio > 1.2) momentum = "Accelerating 🚀";
+    if (ratio < 0.8) momentum = "Declining 📉";
+  } else if (recentAvg > 0) {
+    momentum = "Accelerating 🚀";
+  }
+
+  const peakYearItem = [...data].sort((a,b)=>b.count-a.count)[0];
+  const post2020 = data.filter(d => d.year >= 2020).reduce((a,b)=>a+b.count,0);
+  const highestFinalScorePub = [...pubs].sort((a,b)=>(b.finalScore||0)-(a.finalScore||0))[0];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-slate-100">Publication Timeline</h3>
-        <span className="text-xs text-slate-500">Momentum: {momentum}</span>
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard label="Total Papers (2010+)" value={pubs.length} />
+        <StatCard label="Peak Year" value={peakYearItem?.year || 'N/A'} />
+        <StatCard label="Since 2020" value={post2020} />
+        <StatCard label="Momentum" value={momentum} />
       </div>
 
-      <div className="h-72 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+      <div className="h-48 w-full bg-gray-900 border border-gray-800 rounded-xl p-4">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-            <XAxis dataKey="year" tick={{ fill: '#9ca3af', fontSize: 11 }} />
-            <YAxis allowDecimals={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
-            <Tooltip
-              contentStyle={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0' }}
-              formatter={(value) => [`${value} papers`, 'Publications']}
+          <BarChart data={data}>
+            <XAxis dataKey="year" tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
+            <Tooltip 
+              cursor={{ fill: '#1f2937' }} 
+              contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: 8, fontSize: 12 }} 
+              formatter={(value) => [value + ' papers', 'Count']}
+              labelStyle={{ color: '#9ca3af', marginBottom: 4 }}
             />
-            <Bar dataKey="count" fill="#2563eb" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="count" radius={[2, 2, 0, 0]}>
+              {data.map((entry, index) => {
+                let color = '#4b5563'; // gray
+                if (entry.year >= currentYear - 2) color = '#4f46e5'; // indigo
+                if (highestFinalScorePub && entry.year === highestFinalScorePub.year) color = '#2563eb'; // blue
+                return <Cell key={`cell-${index}`} fill={color} />;
+              })}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Total papers', value: sources.length },
-          {
-            label: 'Peak year',
-            value: chartData.reduce((best, entry) => (entry.count > (best?.count || 0) ? entry : best), null)?.year || 'N/A'
-          },
-          { label: 'Since 2020', value: sources.filter((source) => (source.year || 0) >= 2020).length }
-        ].map((item) => (
-          <div key={item.label} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-center">
-            <p className="text-lg font-semibold text-blue-400">{item.value}</p>
-            <p className="text-[11px] text-slate-500">{item.label}</p>
-          </div>
-        ))}
-      </div>
+function StatCard({ label, value }) {
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
+      <div className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">{label}</div>
+      <div className="text-white text-lg font-bold">{value}</div>
     </div>
   );
 }

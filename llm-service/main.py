@@ -58,6 +58,8 @@ app.add_middleware(
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+OLLAMA_EMBED_TIMEOUT_SEC = float(os.getenv("OLLAMA_EMBED_TIMEOUT_SEC", "20"))
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 LOCAL_FALLBACK_ENABLED = os.getenv("LOCAL_FALLBACK_ENABLED", "true").lower() != "false"
@@ -65,12 +67,16 @@ FALLBACK_EMBED_DIM = max(32, int(os.getenv("FALLBACK_EMBED_DIM", "384")))
 USE_LANGGRAPH_WORKFLOW = os.getenv("USE_LANGGRAPH_WORKFLOW", "true").lower() != "false"
 LAST_GENERATION_PROVIDER = "none"
 LAST_GENERATION_AT: Optional[float] = None
+EMBEDDING_BACKEND = "hash-fallback"
+EMBEDDING_MODEL = "hash-fallback"
 
 embed_model = None
 if SentenceTransformer is not None and np is not None:
     try:
         logger.info("Loading embedding model...")
         embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+        EMBEDDING_BACKEND = "sentence-transformers"
+        EMBEDDING_MODEL = "all-MiniLM-L6-v2"
         logger.info("Embedding model loaded")
     except Exception as exc:
         embedding_import_error = str(exc)
@@ -447,6 +453,8 @@ async def health():
         "status": "offline",
         "model": OLLAMA_MODEL,
         "model_available": False,
+        "embed_model": OLLAMA_EMBED_MODEL,
+        "embed_model_available": False,
         "available_models": [],
     }
 
@@ -459,7 +467,9 @@ async def health():
                 "status": "online",
                 "model": OLLAMA_MODEL,
                 "model_available": any(OLLAMA_MODEL in model_name for model_name in models),
-                "available_models": models[:5],
+                "embed_model": OLLAMA_EMBED_MODEL,
+                "embed_model_available": any(OLLAMA_EMBED_MODEL in model_name for model_name in models),
+                "available_models": models[:10],
             }
     except Exception as exc:
         ollama_status["error"] = str(exc)
@@ -480,7 +490,28 @@ async def health():
         or local_status["available"]
     )
 
-    embeddings_mode = "sentence-transformers" if (embed_model is not None and np is not None) else "hash-fallback"
+    ollama_embeddings_ready = ollama_status["status"] == "online" and (
+        bool(ollama_status.get("embed_model_available"))
+        or bool(ollama_status.get("model_available"))
+    )
+
+    if EMBEDDING_BACKEND == "sentence-transformers":
+        embeddings_mode = "sentence-transformers"
+        embeddings_model = EMBEDDING_MODEL
+        embeddings_error = None
+    elif ollama_embeddings_ready:
+        embeddings_mode = "ollama"
+        embeddings_model = (
+            OLLAMA_EMBED_MODEL
+            if ollama_status.get("embed_model_available")
+            else OLLAMA_MODEL
+        )
+        embeddings_error = None
+    else:
+        embeddings_mode = "hash-fallback"
+        embeddings_model = "hash-fallback"
+        embeddings_error = embedding_import_error
+
     last_generation_age = (
         round(time.time() - LAST_GENERATION_AT, 2)
         if LAST_GENERATION_AT is not None
@@ -497,7 +528,8 @@ async def health():
         "embeddings": {
             "available": True,
             "mode": embeddings_mode,
-            "error": embedding_import_error,
+            "model": embeddings_model,
+            "error": embeddings_error,
         },
         "workflow": {
             "langgraph_enabled": bool(LANGGRAPH_WORKFLOW),
@@ -596,6 +628,100 @@ async def call_groq(
     return payload.get("choices", [{}])[0].get("message", {}).get("content", "")
 
 
+def coerce_float_vector(value: Any) -> Optional[List[float]]:
+    if not isinstance(value, list):
+        return None
+
+    try:
+        vector = [float(item) for item in value]
+    except (TypeError, ValueError):
+        return None
+
+    return vector if vector else None
+
+
+async def ollama_embed_via_embed_api(
+    client: httpx.AsyncClient,
+    model_name: str,
+    texts: List[str],
+) -> List[List[float]]:
+    response = await client.post(
+        f"{OLLAMA_URL}/api/embed",
+        json={"model": model_name, "input": texts},
+    )
+    response.raise_for_status()
+    payload = response.json()
+
+    raw_embeddings = payload.get("embeddings")
+    if isinstance(raw_embeddings, list) and raw_embeddings and isinstance(raw_embeddings[0], list):
+        vectors: List[List[float]] = []
+        for row in raw_embeddings:
+            vector = coerce_float_vector(row)
+            if vector is None:
+                raise ValueError("Invalid embedding vector returned by /api/embed")
+            vectors.append(vector)
+
+        if len(vectors) == len(texts):
+            return vectors
+
+    single_vector = coerce_float_vector(raw_embeddings)
+    if single_vector is not None and len(texts) == 1:
+        return [single_vector]
+
+    raise ValueError("Unexpected /api/embed response shape")
+
+
+async def ollama_embed_via_legacy_api(
+    client: httpx.AsyncClient,
+    model_name: str,
+    texts: List[str],
+) -> List[List[float]]:
+    vectors: List[List[float]] = []
+
+    for text in texts:
+        response = await client.post(
+            f"{OLLAMA_URL}/api/embeddings",
+            json={"model": model_name, "prompt": text},
+        )
+        response.raise_for_status()
+        payload = response.json()
+        vector = coerce_float_vector(payload.get("embedding"))
+        if vector is None:
+            raise ValueError("Unexpected /api/embeddings response shape")
+        vectors.append(vector)
+
+    return vectors
+
+
+async def generate_ollama_embeddings(
+    texts: List[str],
+) -> tuple[Optional[List[List[float]]], Optional[str], Optional[str]]:
+    model_candidates: List[str] = []
+    for candidate in [OLLAMA_EMBED_MODEL, OLLAMA_MODEL]:
+        normalized = str(candidate or "").strip()
+        if normalized and normalized not in model_candidates:
+            model_candidates.append(normalized)
+
+    if not model_candidates:
+        return None, None, "No Ollama embedding model configured"
+
+    errors: List[str] = []
+    async with httpx.AsyncClient(timeout=OLLAMA_EMBED_TIMEOUT_SEC) as client:
+        for model_name in model_candidates:
+            try:
+                try:
+                    vectors = await ollama_embed_via_embed_api(client, model_name, texts)
+                except Exception:
+                    vectors = await ollama_embed_via_legacy_api(client, model_name, texts)
+
+                if vectors and len(vectors) == len(texts):
+                    return vectors, model_name, None
+            except Exception as exc:
+                errors.append(f"{model_name}: {exc}")
+
+    return None, None, "; ".join(errors[:2]) if errors else "Ollama embedding request failed"
+
+
 @app.post("/embed")
 async def embed(req: EmbedRequest):
     """Generate sentence embeddings for semantic similarity scoring."""
@@ -603,15 +729,31 @@ async def embed(req: EmbedRequest):
         raise HTTPException(400, "No texts provided")
 
     truncated = [text[:512] for text in req.texts]
+    mode = EMBEDDING_BACKEND
+    model_name = EMBEDDING_MODEL
+    warning: Optional[str] = None
+
     if embed_model is not None and np is not None:
         embeddings = embed_model.encode(truncated, normalize_embeddings=True).tolist()
     else:
-        embeddings = [build_hash_embedding(text) for text in truncated]
+        ollama_embeddings, ollama_model, ollama_error = await generate_ollama_embeddings(truncated)
+        if ollama_embeddings:
+            embeddings = ollama_embeddings
+            mode = "ollama"
+            model_name = ollama_model or OLLAMA_EMBED_MODEL
+        else:
+            embeddings = [build_hash_embedding(text) for text in truncated]
+            mode = "hash-fallback"
+            model_name = "hash-fallback"
+            warning = ollama_error or embedding_import_error
 
     return {
         "embeddings": embeddings,
         "count": len(embeddings),
         "dim": len(embeddings[0]) if embeddings else FALLBACK_EMBED_DIM,
+        "mode": mode,
+        "model": model_name,
+        "warning": warning,
     }
 
 
@@ -622,14 +764,24 @@ async def rerank(req: RerankRequest):
         raise HTTPException(400, "No documents provided")
 
     texts = [doc.get("text", "")[:512] for doc in req.documents]
+    embedding_mode = EMBEDDING_BACKEND
+
     if embed_model is not None and np is not None:
         query_embedding = embed_model.encode([req.query], normalize_embeddings=True)[0]
         doc_embeddings = embed_model.encode(texts, normalize_embeddings=True)
         scores = [float(score) for score in np.dot(doc_embeddings, query_embedding)]
     else:
-        query_embedding = build_hash_embedding(req.query)
-        doc_embeddings = [build_hash_embedding(text) for text in texts]
-        scores = [cosine_similarity(embedding, query_embedding) for embedding in doc_embeddings]
+        ollama_embeddings, _, _ = await generate_ollama_embeddings([req.query, *texts])
+        if ollama_embeddings and len(ollama_embeddings) == len(texts) + 1:
+            embedding_mode = "ollama"
+            query_embedding = ollama_embeddings[0]
+            doc_embeddings = ollama_embeddings[1:]
+            scores = [cosine_similarity(embedding, query_embedding) for embedding in doc_embeddings]
+        else:
+            embedding_mode = "hash-fallback"
+            query_embedding = build_hash_embedding(req.query)
+            doc_embeddings = [build_hash_embedding(text) for text in texts]
+            scores = [cosine_similarity(embedding, query_embedding) for embedding in doc_embeddings]
 
     ranked = [
         {"id": req.documents[index].get("id"), "score": float(scores[index])}
@@ -637,7 +789,7 @@ async def rerank(req: RerankRequest):
     ]
     ranked.sort(key=lambda item: item["score"], reverse=True)
 
-    return {"ranked": ranked[: req.top_k]}
+    return {"ranked": ranked[: req.top_k], "embeddingMode": embedding_mode}
 
 
 def build_hash_embedding(text: str, dim: int = FALLBACK_EMBED_DIM) -> List[float]:
