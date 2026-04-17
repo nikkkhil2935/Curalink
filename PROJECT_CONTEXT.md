@@ -1,6 +1,6 @@
 # PROJECT CONTEXT
 
-Last Updated: 2026-04-16T03:34:27.651Z
+Last Updated: 2026-04-17T11:18:50.082Z
 Workspace: Curalink
 
 ## What This Is
@@ -171,6 +171,7 @@ Workspace: Curalink
   - scripts/integration-smoke.mjs
 - server/
   - server/src/
+    - server/src/lib/
     - server/src/middleware/
     - server/src/models/
     - server/src/routes/
@@ -180,6 +181,7 @@ Workspace: Curalink
   - server/.env.example
   - server/package-lock.json
   - server/package.json
+- .env.example
 - .gitignore
 - DAY1_IMPLEMENTATION.md
 - DAY2_IMPLEMENTATION.md
@@ -192,4 +194,5 @@ Workspace: Curalink
 - PROJECT_CONTEXT.json
 - PROJECT_CONTEXT.md
 - README.md
+- TODO.md
 

@@ -4,8 +4,17 @@ import Session from '../models/Session.js';
 import Message from '../models/Message.js';
 import SourceDoc from '../models/SourceDoc.js';
 import Analytics from '../models/Analytics.js';
+import { buildSessionInsights } from '../services/sessionInsights.js';
+import { gzipCompression } from '../middleware/gzipCompression.js';
+import {
+  getCachedSessionInsights,
+  setCachedSessionInsights,
+  invalidateSessionInsightsCache
+} from '../services/insightsCache.js';
+import logger from '../lib/logger.js';
 
 const router = express.Router();
+router.use(gzipCompression());
 const ALLOWED_SEX_VALUES = new Set(['Male', 'Female', 'Other']);
 
 function normalizeText(value) {
@@ -152,7 +161,7 @@ router.post('/', async (req, res, next) => {
         sessionId: session._id
       });
     } catch (analyticsErr) {
-      console.error('Analytics session_start logging error:', analyticsErr.message);
+      logger.error(`Analytics session_start logging error: ${analyticsErr.message}`);
     }
 
     return res.status(201).json({ session });
@@ -272,6 +281,30 @@ router.get('/:id/sources/:messageId', async (req, res, next) => {
   }
 });
 
+router.get('/:id/insights', async (req, res, next) => {
+  try {
+    if (!hasValidSessionId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
+
+    const sessionExists = await Session.exists({ _id: req.params.id });
+    if (!sessionExists) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const cachedInsights = getCachedSessionInsights(req.params.id);
+    if (cachedInsights) {
+      return res.json(cachedInsights);
+    }
+
+    const insights = await buildSessionInsights(req.params.id);
+    setCachedSessionInsights(req.params.id, insights);
+    return res.json(insights);
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.get('/', async (req, res, next) => {
   try {
     const sessions = await Session.find()
@@ -300,6 +333,8 @@ router.delete('/:id', async (req, res, next) => {
       Message.deleteMany({ sessionId: req.params.id }),
       Analytics.deleteMany({ sessionId: req.params.id })
     ]);
+
+    invalidateSessionInsightsCache(req.params.id);
 
     return res.json({ message: 'Session deleted' });
   } catch (err) {

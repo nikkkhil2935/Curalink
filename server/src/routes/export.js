@@ -2,8 +2,10 @@ import express from 'express';
 import Session from '../models/Session.js';
 import Message from '../models/Message.js';
 import Analytics from '../models/Analytics.js';
+import { gzipCompression } from '../middleware/gzipCompression.js';
 
 const router = express.Router();
+router.use(gzipCompression());
 
 // Placeholder route. Real PDF generation will be implemented later.
 router.post('/:sessionId', async (req, res, next) => {

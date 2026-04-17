@@ -1,4 +1,5 @@
 import axios from 'axios';
+import logger from '../../lib/logger.js';
 
 const BASE_URL = 'https://api.openalex.org/works';
 const POLITE_EMAIL = process.env.PUBMED_EMAIL || 'curalink@demo.com';
@@ -9,7 +10,7 @@ export async function fetchFromOpenAlex(query, targetCount = 200) {
   }
 
   const startTime = Date.now();
-  console.log(`OpenAlex searching: "${query}"`);
+  logger.info(`OpenAlex searching: "${query}"`);
 
   const results = [];
   const seenIds = new Set();
@@ -80,12 +81,12 @@ export async function fetchFromOpenAlex(query, targetCount = 200) {
 
         await new Promise((resolve) => setTimeout(resolve, 200));
       } catch (err) {
-        console.error(`OpenAlex page ${page} error:`, err.message);
+        logger.error(`OpenAlex page ${page} error: ${err.message}`);
       }
     }
   }
 
-  console.log(`OpenAlex fetched ${results.length} works in ${Date.now() - startTime}ms`);
+  logger.info(`OpenAlex fetched ${results.length} works in ${Date.now() - startTime}ms`);
   return results;
 }
 

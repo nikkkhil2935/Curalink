@@ -1,4 +1,5 @@
 import axios from 'axios';
+import logger from '../../lib/logger.js';
 
 const BASE_URL = 'https://clinicaltrials.gov/api/v2/studies';
 
@@ -24,7 +25,7 @@ export async function fetchFromClinicalTrials(
   }
 
   const startTime = Date.now();
-  console.log(`ClinicalTrials searching: "${condition}"`);
+  logger.info(`ClinicalTrials searching: "${condition}"`);
 
   const results = [];
   const seen = new Set();
@@ -166,10 +167,10 @@ export async function fetchFromClinicalTrials(
 
       await new Promise((resolve) => setTimeout(resolve, 300));
     } catch (err) {
-      console.error('ClinicalTrials fetch error:', err.message);
+      logger.error(`ClinicalTrials fetch error: ${err.message}`);
     }
   }
 
-  console.log(`ClinicalTrials fetched ${results.length} studies in ${Date.now() - startTime}ms`);
+  logger.info(`ClinicalTrials fetched ${results.length} studies in ${Date.now() - startTime}ms`);
   return results;
 }

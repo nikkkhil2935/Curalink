@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Home, MessageSquare, BookOpen, BarChart2 } from 'lucide-react';
 import ChatPanel from '@/components/chat/ChatPanel.jsx';
 import EvidencePanel from '@/components/evidence/EvidencePanel.jsx';
 import Sidebar from '@/components/sidebar/Sidebar.jsx';
@@ -9,6 +9,12 @@ import LoadingOverlay from '@/components/ui/LoadingOverlay.jsx';
 import ErrorBanner from '@/components/ui/ErrorBanner.jsx';
 import { useAppStore } from '@/store/useAppStore.js';
 import { api, extractApiError } from '@/utils/api.js';
+
+const MOBILE_TABS = [
+  { id: 'chat',     label: 'Chat',     icon: MessageSquare },
+  { id: 'evidence', label: 'Evidence', icon: BookOpen      },
+  { id: 'sidebar',  label: 'Stats',    icon: BarChart2     },
+];
 
 export default function ResearchInterface() {
   const { sessionId } = useParams();
@@ -19,53 +25,23 @@ export default function ResearchInterface() {
   const [sourceWarning, setSourceWarning] = useState('');
   const [retryToken, setRetryToken] = useState(0);
   const [mobileTab, setMobileTab] = useState('chat');
-  const mobileTabRefs = useRef([]);
+  const tabRefs = useRef([]);
 
-  const mobileTabs = [
-    { id: 'chat', label: 'Chat' },
-    { id: 'evidence', label: 'Evidence' },
-    { id: 'sidebar', label: 'Stats' }
-  ];
-
-  const onMobileTabKeyDown = (event, index) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
-      return;
-    }
-
-    event.preventDefault();
-
-    let nextIndex = index;
-    if (event.key === 'ArrowRight') {
-      nextIndex = (index + 1) % mobileTabs.length;
-    } else if (event.key === 'ArrowLeft') {
-      nextIndex = (index - 1 + mobileTabs.length) % mobileTabs.length;
-    } else if (event.key === 'Home') {
-      nextIndex = 0;
-    } else if (event.key === 'End') {
-      nextIndex = mobileTabs.length - 1;
-    }
-
-    const nextTab = mobileTabs[nextIndex];
-    if (!nextTab) {
-      return;
-    }
-
-    setMobileTab(nextTab.id);
-    mobileTabRefs.current[nextIndex]?.focus();
-  };
-
-  const retryBootstrap = () => {
-    setRetryToken((previous) => previous + 1);
+  const onTabKeyDown = (e, idx) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+    let next = idx;
+    if (e.key === 'ArrowRight') next = (idx + 1) % MOBILE_TABS.length;
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + MOBILE_TABS.length) % MOBILE_TABS.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = MOBILE_TABS.length - 1;
+    setMobileTab(MOBILE_TABS[next].id);
+    tabRefs.current[next]?.focus();
   };
 
   useEffect(() => {
-    let isMounted = true;
-
-    if (!sessionId) {
-      setIsBootstrapping(false);
-      setBootstrapError('Missing session id in route.');
-      return () => {};
-    }
+    let mounted = true;
+    if (!sessionId) { setIsBootstrapping(false); setBootstrapError('Missing session id.'); return; }
 
     const load = async () => {
       setIsBootstrapping(true);
@@ -74,65 +50,48 @@ export default function ResearchInterface() {
       setLoading(false);
       setSelectedAssistantMessage(null);
       setSources([]);
-
       try {
-        const { data: sessionData } = await api.get(`/sessions/${sessionId}`);
+        const { data } = await api.get(`/sessions/${sessionId}`);
+        if (!mounted) return;
+        setSession(data.session);
+        const msgs = data.messages || [];
+        setMessages(msgs);
 
-        if (!isMounted) {
-          return;
-        }
+        const latestWithSources = [...msgs].reverse().find(
+          (m) =>
+            m.role === 'assistant' &&
+            Array.isArray(m.usedSourceIds) &&
+            m.usedSourceIds.length > 0
+        );
 
-        setSession(sessionData.session);
-        const messages = sessionData.messages || [];
-        setMessages(messages);
-
-        const latestAssistantWithSources = [...messages]
-          .reverse()
-          .find(
-            (message) =>
-              message.role === 'assistant' &&
-              ((Array.isArray(message.usedSourceIds) && message.usedSourceIds.length > 0) ||
-                Object.keys(message.sourceIndex || {}).length > 0)
-          );
-
-        if (latestAssistantWithSources?._id) {
-          setSelectedAssistantMessage(latestAssistantWithSources._id);
+        if (latestWithSources?._id) {
+          setSelectedAssistantMessage(latestWithSources._id);
           try {
-            const { data: sourceData } = await api.get(
-              `/sessions/${sessionId}/sources/${latestAssistantWithSources._id}`
-            );
-            if (isMounted) {
-              setSources(sourceData.sources || [], latestAssistantWithSources._id);
-            }
+            const { data: sd } = await api.get(`/sessions/${sessionId}/sources/${latestWithSources._id}`);
+            if (mounted) setSources(sd.sources || [], latestWithSources._id);
           } catch {
-            if (isMounted) {
-              setSourceWarning('Evidence for the latest answer could not be loaded yet. Retry to refresh sources.');
-            }
+            if (mounted) setSourceWarning('Could not load evidence for the latest answer. Retry to refresh.');
           }
         }
-      } catch (error) {
-        if (isMounted) {
-          setBootstrapError(extractApiError(error, 'Failed to load this research session.'));
-        }
+      } catch (err) {
+        if (mounted) setBootstrapError(extractApiError(err, 'Failed to load this research session.'));
       } finally {
-        if (isMounted) {
-          setIsBootstrapping(false);
-        }
+        if (mounted) setIsBootstrapping(false);
       }
     };
 
     load();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { mounted = false; };
   }, [retryToken, sessionId, setLoading, setMessages, setSelectedAssistantMessage, setSession, setSources]);
 
   if (isBootstrapping) {
     return (
-      <div className="app-shell flex min-h-dvh items-center justify-center bg-transparent px-6 text-slate-100">
+      <div
+        className="flex min-h-dvh items-center justify-center px-6"
+        style={{ background: 'var(--color-canvas)' }}
+      >
         <div className="w-full max-w-xl">
-          <LoadingOverlay message="Loading session context..." />
+          <LoadingOverlay message="Loading session context…" />
         </div>
       </div>
     );
@@ -140,105 +99,146 @@ export default function ResearchInterface() {
 
   if (bootstrapError) {
     return (
-      <div className="app-shell flex min-h-dvh items-center justify-center bg-transparent px-6 text-slate-100">
-        <div className="w-full max-w-xl">
-          <ErrorBanner message={bootstrapError} onRetry={retryBootstrap} />
+      <div
+        className="flex min-h-dvh items-center justify-center px-6"
+        style={{ background: 'var(--color-canvas)' }}
+      >
+        <div className="w-full max-w-xl space-y-4">
+          <ErrorBanner message={bootstrapError} onRetry={() => setRetryToken((t) => t + 1)} />
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="cl-btn-ghost w-full flex items-center justify-center gap-2"
+          >
+            <Home className="h-4 w-4" /> Back to Home
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-dvh overflow-hidden bg-gray-950 text-gray-100">
-      <main className="relative flex min-h-0 flex-1 overflow-hidden bg-gray-950">
+    <div
+      className="flex min-h-dvh overflow-hidden"
+      style={{ background: 'var(--color-canvas)', color: 'var(--text-primary)' }}
+    >
+      {/* ── MAIN 3-PANEL LAYOUT ── */}
+      <main className="relative flex min-h-0 flex-1 overflow-hidden">
+
+        {/* Back button */}
         <button
           type="button"
           onClick={() => navigate('/')}
-          className="absolute left-3 top-3 z-30 inline-flex items-center gap-2 rounded-md border border-gray-700 bg-gray-900/90 px-3 py-1.5 text-xs font-semibold text-gray-100 shadow-md hover:border-blue-600 hover:text-blue-300"
+          className="absolute left-3 top-3 z-30 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all"
+          style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border-strong)',
+            color: 'var(--text-secondary)',
+            boxShadow: 'var(--shadow-card)',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; }}
         >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Home
+          <ArrowLeft className="h-3 w-3" />
+          Home
         </button>
 
-        {sourceWarning ? (
+        {sourceWarning && (
           <div className="absolute left-1/2 top-2 z-20 w-[calc(100%-1.5rem)] max-w-2xl -translate-x-1/2 md:top-3">
-            <ErrorBanner message={sourceWarning} onRetry={retryBootstrap} />
+            <ErrorBanner message={sourceWarning} onRetry={() => setRetryToken((t) => t + 1)} />
           </div>
-        ) : null}
+        )}
 
+        {/* Chat Panel */}
         <motion.div
-          initial={{ opacity: 0, x: -20 }}
+          initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
-          className={`${mobileTab === 'chat' ? 'flex' : 'hidden'} w-full flex-col pb-16 md:flex md:w-[45%] md:pb-0 bg-gray-950 z-10`}
-          id="chat-mobile-panel"
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+          className={`${mobileTab === 'chat' ? 'flex' : 'hidden'} w-full flex-col pb-16 md:flex md:w-[45%] md:pb-0`}
+          style={{ borderRight: '1px solid var(--color-border)' }}
+          id="chat-panel"
           role="tabpanel"
-          aria-labelledby="chat-mobile-tab"
+          aria-labelledby="chat-tab"
         >
           <ChatPanel />
         </motion.div>
 
+        {/* Evidence Panel */}
         <motion.div
-           initial={{ opacity: 0, x: 20 }}
-           animate={{ opacity: 1, x: 0 }}
-           transition={{ duration: 0.4, ease: 'easeOut' }}
-          className={`${mobileTab === 'evidence' ? 'flex' : 'hidden'} w-full flex-col pb-16 md:flex md:w-[55%] md:pb-0 bg-gray-900 shadow-xl shadow-black/20 z-20`}
-          id="evidence-mobile-panel"
+          initial={{ opacity: 0, x: 16 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+          className={`${mobileTab === 'evidence' ? 'flex' : 'hidden'} w-full flex-col pb-16 md:flex md:w-[55%] md:pb-0`}
+          style={{ background: 'var(--color-surface)' }}
+          id="evidence-panel"
           role="tabpanel"
-          aria-labelledby="evidence-mobile-tab"
+          aria-labelledby="evidence-tab"
         >
           <EvidencePanel />
         </motion.div>
 
+        {/* Mobile sidebar panel */}
         <div
-          className={`${mobileTab === 'sidebar' ? 'flex' : 'hidden'} w-full flex-col pb-16 md:hidden bg-gray-950`}
-          id="sidebar-mobile-panel"
+          className={`${mobileTab === 'sidebar' ? 'flex' : 'hidden'} w-full flex-col pb-16 md:hidden`}
+          style={{ background: 'var(--color-canvas)' }}
+          id="sidebar-panel"
           role="tabpanel"
-          aria-labelledby="sidebar-mobile-tab"
+          aria-labelledby="sidebar-tab"
         >
           <Sidebar />
         </div>
       </main>
 
-      <aside className="hidden w-[320px] bg-gray-950 md:block z-10 shadow-lg shadow-black/10 border-l border-gray-800">
+      {/* ── SIDEBAR (desktop) ── */}
+      <aside
+        className="hidden w-75 md:flex flex-col"
+        style={{
+          borderLeft: '1px solid var(--color-border)',
+          background: 'var(--color-canvas)',
+        }}
+      >
         <Sidebar />
       </aside>
 
+      {/* ── MOBILE TAB BAR ── */}
       <div
-        className="fixed inset-x-0 bottom-0 z-50 flex bg-gray-900 md:hidden"
+        className="fixed inset-x-0 bottom-0 z-50 flex md:hidden"
         role="tablist"
-        aria-label="Research interface sections"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}
+        aria-label="Interface sections"
+        style={{
+          background: 'var(--color-surface)',
+          borderTop: '1px solid var(--color-border)',
+          paddingBottom: 'max(env(safe-area-inset-bottom), 0px)',
+        }}
       >
-        {mobileTabs.map((tab, index) => {
-          const isActive = mobileTab === tab.id;
+        {MOBILE_TABS.map((tab, i) => {
+          const active = mobileTab === tab.id;
           return (
             <button
               key={tab.id}
-              ref={(node) => {
-                mobileTabRefs.current[index] = node;
-              }}
+              ref={(n) => { tabRefs.current[i] = n; }}
               type="button"
               onClick={() => setMobileTab(tab.id)}
-              onKeyDown={(event) => onMobileTabKeyDown(event, index)}
+              onKeyDown={(e) => onTabKeyDown(e, i)}
               role="tab"
-              id={`${tab.id}-mobile-tab`}
-              aria-controls={`${tab.id}-mobile-panel`}
-              aria-selected={isActive}
-              className={`relative flex-1 py-4 text-xs font-semibold uppercase tracking-wider transition-colors ${
-                isActive ? 'text-white' : 'text-gray-500 hover:text-gray-300'
-              }`}
+              id={`${tab.id}-tab`}
+              aria-controls={`${tab.id}-panel`}
+              aria-selected={active}
+              className="relative flex flex-1 flex-col items-center gap-1 py-3 text-[10px] font-semibold uppercase tracking-wider transition-colors"
+              style={{ color: active ? '#60a5fa' : 'var(--text-muted)' }}
             >
-              {isActive && (
+              {active && (
                 <motion.div
-                  layoutId="active-mobile-tab"
-                  className="absolute inset-x-2 inset-y-1 rounded-lg bg-gray-800 z-0"
-                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                  layoutId="mobile-tab-bg"
+                  className="absolute inset-x-1 inset-y-1 rounded-xl"
+                  style={{ background: 'rgba(59,130,246,0.08)' }}
+                  transition={{ type: 'spring', stiffness: 350, damping: 32 }}
                 />
               )}
+              <tab.icon className="relative z-10 h-4 w-4" />
               <span className="relative z-10">{tab.label}</span>
             </button>
-          )
+          );
         })}
       </div>
     </div>

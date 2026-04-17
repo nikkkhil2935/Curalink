@@ -8,7 +8,8 @@
     "start": "node src/app.js",
     "build": "echo \"No build step\"",
     "lint": "node --check src/app.js && node --check src/routes/query.js && node --check src/routes/sessions.js && node --check src/services/pipeline/orchestrator.js",
-    "check": "npm run lint"
+    "check": "npm run lint",
+    "lint:logs": "node --check src/lib/logger.js"
   },
   "dependencies": {
     "axios": "^1.8.4",
@@ -22,6 +23,7 @@
     "morgan": "^1.10.0",
     "node-cron": "^4.2.1",
     "uuid": "^11.0.5",
+    "winston": "^3.19.0",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {

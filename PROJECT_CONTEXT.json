@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-16T03:34:27.651Z",
+  "generatedAt": "2026-04-17T11:18:50.082Z",
   "workspaceName": "Curalink",
   "services": [
     {
@@ -488,6 +488,7 @@
     "  - scripts/integration-smoke.mjs",
     "- server/",
     "  - server/src/",
+    "    - server/src/lib/",
     "    - server/src/middleware/",
     "    - server/src/models/",
     "    - server/src/routes/",
@@ -497,6 +498,7 @@
     "  - server/.env.example",
     "  - server/package-lock.json",
     "  - server/package.json",
+    "- .env.example",
     "- .gitignore",
     "- DAY1_IMPLEMENTATION.md",
     "- DAY2_IMPLEMENTATION.md",
@@ -508,6 +510,7 @@
     "- PRD (1).md",
     "- PROJECT_CONTEXT.json",
     "- PROJECT_CONTEXT.md",
-    "- README.md"
+    "- README.md",
+    "- TODO.md"
   ]
 }

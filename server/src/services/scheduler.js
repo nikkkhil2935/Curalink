@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Session from '../models/Session.js';
 import Analytics from '../models/Analytics.js';
 import SourceDoc from '../models/SourceDoc.js';
+import logger from '../lib/logger.js';
 
 let snapshotJob = null;
 let snapshotInProgress = false;
@@ -36,7 +37,7 @@ async function captureAnalyticsSnapshot(reason = 'scheduled') {
       }
     });
   } catch (error) {
-    console.error('Analytics snapshot scheduler error:', error.message);
+    logger.error('Analytics snapshot scheduler error:', error.message);
   } finally {
     snapshotInProgress = false;
   }
@@ -49,9 +50,9 @@ export function startAnalyticsScheduler() {
   }
 
   const cronExpr = process.env.ANALYTICS_SNAPSHOT_CRON || '0 * * * *';
-
+  
   if (!cron.validate(cronExpr)) {
-    console.error(`Invalid ANALYTICS_SNAPSHOT_CRON: ${cronExpr}`);
+    logger.error(`Invalid ANALYTICS_SNAPSHOT_CRON: ${cronExpr}`);
     return;
   }
 

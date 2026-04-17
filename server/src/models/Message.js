@@ -59,12 +59,23 @@ const messageSchema = new mongoose.Schema(
       default: {}
     },
     retrievalStats: {
+      traceId: String,
       totalCandidates: Number,
       pubmedFetched: Number,
       openalexFetched: Number,
       ctFetched: Number,
       rerankedTo: Number,
-      timeTakenMs: Number
+      timeTakenMs: Number,
+      stageTimingsMs: {
+        intent: Number,
+        expansion: Number,
+        retrieval: Number,
+        normalization: Number,
+        rerank: Number,
+        context: Number,
+        llm: Number,
+        total: Number
+      }
     },
     intentType: String,
     contextBadge: String
@@ -74,5 +85,6 @@ const messageSchema = new mongoose.Schema(
 
 messageSchema.index({ sessionId: 1, createdAt: 1 });
 messageSchema.index({ sessionId: 1, role: 1, createdAt: -1 });
+messageSchema.index({ sessionId: 1, role: 1, 'retrievalStats.traceId': 1, createdAt: -1 });
 
 export default mongoose.model('Message', messageSchema);

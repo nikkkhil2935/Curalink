@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { classifyIntent, getRetrievalStrategy } from './intentClassifier.js';
 import { expandQuery } from './queryExpander.js';
 import { fetchFromPubMed } from '../apis/pubmed.js';
@@ -8,14 +9,26 @@ import { rerankCandidates, selectForContext, computeEvidenceStrength } from './r
 import { buildRAGContext, buildSystemPrompt, buildUserPrompt } from './contextPackager.js';
 import { callLLM, parseLLMResponse, semanticRerank } from '../llm.js';
 import SourceDoc from '../../models/SourceDoc.js';
+import logger from '../../lib/logger.js';
 import Analytics from '../../models/Analytics.js';
 
-export async function runRetrievalPipeline(session, userMessage, conversationHistory = []) {
+export async function runRetrievalPipeline(session, userMessage, conversationHistory = [], options = {}) {
   const startTime = Date.now();
+  const stageTimingsMs = createStageTimings();
+  const traceId = options.traceId || buildDeterministicTraceId(session?._id, userMessage, startTime);
+  const llmTrace = {
+    provider: null,
+    cacheHit: false,
+    cacheSimilarity: null,
+    pipelineTimings: []
+  };
 
+  let stageStart = Date.now();
   const intentType = classifyIntent(userMessage, session.intent);
   const strategy = getRetrievalStrategy(intentType);
+  stageTimingsMs.intent = Date.now() - stageStart;
 
+  stageStart = Date.now();
   const expanded = expandQuery(session.disease, userMessage, intentType);
 
   const isFollowUp = conversationHistory.length > 0;
@@ -31,32 +44,40 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
       expanded.ctIntervention = userMessage;
     }
   }
+  stageTimingsMs.expansion = Date.now() - stageStart;
 
-  console.log(`Starting retrieval for query: "${expanded.fullQuery}"`);
+  logger.info(`Starting retrieval for query: "${expanded.fullQuery}"`);
+  stageStart = Date.now();
   const [pubmedResults, openalexResults, ctResults] = await Promise.all([
-    fetchFromPubMed(expanded.pubmedQuery, 200, strategy.pubmedSort),
-    fetchFromOpenAlex(expanded.openalexQuery, 200),
-    fetchFromClinicalTrials(expanded.ctCondition, expanded.ctIntervention, session.location, 100)
+    fetchFromPubMed(expanded.pubmedQuery, Number(process.env.RETRIEVAL_PUBMED_MAX || 200), strategy.pubmedSort),
+    fetchFromOpenAlex(expanded.openalexQuery, Number(process.env.RETRIEVAL_OPENALEX_MAX || 200)),
+    fetchFromClinicalTrials(expanded.ctCondition, expanded.ctIntervention, session.location, Number(process.env.RETRIEVAL_CT_MAX || 100))
   ]);
+  stageTimingsMs.retrieval = Date.now() - stageStart;
 
   const stats = {
+    traceId,
+    stageTimingsMs,
     pubmedFetched: pubmedResults.length,
     openalexFetched: openalexResults.length,
     ctFetched: ctResults.length,
     totalCandidates: pubmedResults.length + openalexResults.length + ctResults.length
   };
 
+  stageStart = Date.now();
   const normalized = normalizeAndDeduplicate(pubmedResults, openalexResults, ctResults);
+  stageTimingsMs.normalization = Date.now() - stageStart;
 
   if (!normalized.length) {
     const evidenceStrength = {
       label: 'LIMITED',
-      emoji: 'LOW',
+      emoji: '🔴',
       description: 'No usable evidence returned from configured retrieval sources'
     };
     const structuredAnswer = createNoEvidenceStructuredAnswer(session.disease, userMessage);
     stats.rerankedTo = 0;
-    stats.timeTakenMs = Date.now() - startTime;
+    stageTimingsMs.total = Date.now() - startTime;
+    stats.timeTakenMs = stageTimingsMs.total;
 
     await Analytics.create({
       event: 'query',
@@ -70,7 +91,7 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
         noEvidence: true
       }
     }).catch((err) => {
-      console.error('Analytics logging error:', err.message);
+      logger.error(`Analytics logging error: ${err.message}`);
     });
 
     return {
@@ -84,10 +105,12 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
       intentType,
       expandedQuery: expanded,
       contextBadge,
-      sourceIndex: {}
+      sourceIndex: {},
+      trace: llmTrace
     };
   }
 
+  stageStart = Date.now();
   const queryTerms = expanded.fullQuery
     .split(/\s+/)
     .map((term) => term.trim())
@@ -109,14 +132,28 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     .slice(0, Math.max(0, 100 - seededPool.length));
   const semanticInput = [...seededPool, ...backfill].slice(0, 100);
 
-  const ranked = await semanticRerank(expanded.fullQuery, semanticInput);
+  const semanticSkipThreshold = getSemanticSkipThreshold();
+  const topContextSimilarity = computeTopContextSimilarity(expanded.fullQuery, semanticInput, 20);
+  const skipSemanticRerank = topContextSimilarity >= semanticSkipThreshold;
+
+  let ranked = [];
+  if (skipSemanticRerank) {
+    ranked = semanticInput;
+    stats.rerankSkipped = true;
+  } else {
+    ranked = await semanticRerank(expanded.fullQuery, semanticInput);
+    stats.rerankSkipped = false;
+  }
+  stats.rerankSkipSimilarity = Number(topContextSimilarity.toFixed(4));
 
   const minTrialsForContext = ctResults.length > 0 ? (intentType === 'CLINICAL_TRIALS' ? 2 : 1) : 0;
   const contextDocs = selectForContext(ranked, 8, 5, { minTrials: minTrialsForContext });
   stats.rerankedTo = contextDocs.length;
 
   const evidenceStrength = computeEvidenceStrength(contextDocs);
+  stageTimingsMs.rerank = Date.now() - stageStart;
 
+  stageStart = Date.now();
   const upsertOps = contextDocs.map((doc) => {
     const { id, ...docData } = doc;
 
@@ -139,7 +176,7 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
 
   if (upsertOps.length) {
     await SourceDoc.bulkWrite(upsertOps, { ordered: false }).catch((err) => {
-      console.error('SourceDoc upsert error:', err.message);
+      logger.error(`SourceDoc upsert error: ${err.message}`);
     });
   }
 
@@ -159,10 +196,32 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     evidenceStrength,
     intentType
   );
+  stageTimingsMs.context = Date.now() - stageStart;
 
+  stageStart = Date.now();
   let structuredAnswer;
   try {
     const llmData = await callLLM(systemPrompt, userPrompt);
+    llmTrace.provider = llmData?.provider || null;
+    llmTrace.cacheHit = Boolean(llmData?.cache_hit);
+    llmTrace.cacheSimilarity = Number.isFinite(Number(llmData?.cache_similarity))
+      ? Number(Number(llmData.cache_similarity).toFixed(4))
+      : null;
+    llmTrace.pipelineTimings = Array.isArray(llmData?.pipeline_timings)
+      ? llmData.pipeline_timings
+          .map((timing) => ({
+            stage: String(timing?.stage || '').trim(),
+            duration_ms: Number(timing?.duration_ms || 0)
+          }))
+          .filter((timing) => timing.stage && Number.isFinite(timing.duration_ms) && timing.duration_ms >= 0)
+      : [];
+
+    if (llmTrace.pipelineTimings.length) {
+      const llmPipelineTotalMs = llmTrace.pipelineTimings.reduce((total, timing) => total + timing.duration_ms, 0);
+      stageTimingsMs.llm = Math.max(stageTimingsMs.llm, Math.round(llmPipelineTotalMs));
+      stats.llmPipelineStageCount = llmTrace.pipelineTimings.length;
+    }
+
     structuredAnswer = parseLLMResponse(llmData, {
       allowedCitationIds: Object.keys(sourceIndex || {}),
       contextDocs,
@@ -176,13 +235,21 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     }
     structuredAnswer = citationValidation.answer;
   } catch (llmErr) {
-    console.error('LLM failed, using graceful fallback:', llmErr.message);
+    logger.warn(`LLM failed, using graceful fallback: ${llmErr.message}`);
     structuredAnswer = createFallbackStructuredAnswer(contextDocs, session.disease, evidenceStrength, sourceIndex);
+    llmTrace.provider = llmTrace.provider || 'local';
+  }
+  stageTimingsMs.llm = Math.max(stageTimingsMs.llm, Date.now() - stageStart);
+
+  stats.llmCacheHit = llmTrace.cacheHit;
+  if (llmTrace.cacheSimilarity !== null) {
+    stats.llmCacheSimilarity = llmTrace.cacheSimilarity;
   }
 
   const responseText = buildPlainTextSummary(structuredAnswer, stats);
 
-  stats.timeTakenMs = Date.now() - startTime;
+  stageTimingsMs.total = Date.now() - startTime;
+  stats.timeTakenMs = stageTimingsMs.total;
 
   await Analytics.create({
     event: 'query',
@@ -195,7 +262,7 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
       strategy
     }
   }).catch((err) => {
-    console.error('Analytics logging error:', err.message);
+    logger.error(`Analytics logging error: ${err.message}`);
   });
 
   return {
@@ -209,14 +276,137 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     intentType,
     expandedQuery: expanded,
     contextBadge,
-    sourceIndex
+    sourceIndex,
+    trace: {
+      ...llmTrace,
+      rerankSkipped: Boolean(stats.rerankSkipped),
+      rerankSimilarity: Number.isFinite(Number(stats.rerankSkipSimilarity))
+        ? Number(stats.rerankSkipSimilarity)
+        : null
+    }
   };
+}
+
+function createStageTimings() {
+  return {
+    intent: 0,
+    expansion: 0,
+    retrieval: 0,
+    normalization: 0,
+    rerank: 0,
+    context: 0,
+    llm: 0,
+    total: 0
+  };
+}
+
+function getSemanticSkipThreshold() {
+  const rawThreshold = Number.parseFloat(process.env.RETRIEVAL_SEMANTIC_SKIP_THRESHOLD || '0.97');
+  if (Number.isNaN(rawThreshold)) {
+    return 0.97;
+  }
+
+  return Math.min(1, Math.max(0, rawThreshold));
+}
+
+function normalizeSimilarityText(input) {
+  return String(input || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildTokenFrequency(text) {
+  const freq = new Map();
+  const tokens = normalizeSimilarityText(text)
+    .split(' ')
+    .map((token) => token.trim())
+    .filter((token) => token.length > 1);
+
+  for (const token of tokens) {
+    freq.set(token, (freq.get(token) || 0) + 1);
+  }
+
+  return freq;
+}
+
+function computeCosineTokenSimilarity(leftText, rightText) {
+  const left = buildTokenFrequency(leftText);
+  const right = buildTokenFrequency(rightText);
+
+  if (!left.size || !right.size) {
+    return 0;
+  }
+
+  let dotProduct = 0;
+  let leftNorm = 0;
+  let rightNorm = 0;
+
+  for (const value of left.values()) {
+    leftNorm += value * value;
+  }
+
+  for (const value of right.values()) {
+    rightNorm += value * value;
+  }
+
+  for (const [token, value] of left.entries()) {
+    dotProduct += value * (right.get(token) || 0);
+  }
+
+  if (!leftNorm || !rightNorm) {
+    return 0;
+  }
+
+  return dotProduct / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+}
+
+function computeTopContextSimilarity(query, docs = [], sampleSize = 20) {
+  const queryText = normalizeSimilarityText(query);
+  if (!queryText) {
+    return 0;
+  }
+
+  let bestScore = 0;
+
+  for (const doc of docs.slice(0, sampleSize)) {
+    const docText = normalizeSimilarityText(`${doc?.title || ''} ${doc?.abstract || ''}`);
+    if (!docText) {
+      continue;
+    }
+
+    if (docText.includes(queryText)) {
+      return 1;
+    }
+
+    const score = computeCosineTokenSimilarity(queryText, docText);
+    if (score > bestScore) {
+      bestScore = score;
+    }
+  }
+
+  return bestScore;
+}
+
+function buildDeterministicTraceId(sessionId, userMessage, seedMs) {
+  const sessionPart = String(sessionId || 'session').slice(-6);
+  const normalizedMessage = String(userMessage || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  const seed = String(Number(seedMs) || Date.now());
+  const digest = createHash('sha1')
+    .update(`${sessionPart}:${normalizedMessage}:${seed}`)
+    .digest('hex')
+    .slice(0, 10);
+
+  return `q_${sessionPart}_${Number(seed).toString(36)}_${digest}`;
 }
 
 function createNoEvidenceStructuredAnswer(disease, userMessage) {
   return {
-    condition_overview:
-      `No grounded evidence could be retrieved for ${disease}. Please refine the query or broaden the condition context and try again.`,
+    condition_overview: 'No research found for this query. Try broadening the disease term.',
     evidence_strength: 'LIMITED',
     research_insights: [],
     clinical_trials: [],

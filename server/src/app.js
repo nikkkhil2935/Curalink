@@ -12,6 +12,7 @@ import queryRoutes from './routes/query.js';
 import analyticsRoutes from './routes/analytics.js';
 import exportRoutes from './routes/export.js';
 import { startAnalyticsScheduler, stopAnalyticsScheduler } from './services/scheduler.js';
+import logger from './lib/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 dotenv.config();
@@ -23,11 +24,10 @@ const configuredOrigins = (process.env.FRONTEND_URL || '')
   .map((origin) => origin.trim())
   .filter(Boolean);
 const allowWildcardCors = !isProduction && configuredOrigins.length === 0;
-const allowLocalMongoFallback =
-  (process.env.MONGODB_ALLOW_LOCAL_FALLBACK || (!isProduction ? 'true' : 'false')).toLowerCase() === 'true';
+
 let mongoLastError = null;
-let mongoMode = 'disconnected';
 let mongoRetryHandle = null;
+let mongoMode = 'disconnected';
 let memoryServer = null;
 
 const mongoRetryMs = Number.parseInt(process.env.MONGODB_RETRY_MS || '15000', 10);
@@ -95,28 +95,32 @@ function sanitizeMongoUri(uri) {
 }
 
 function getMongoCandidates() {
-  const candidates = [
-    { uri: process.env.MONGODB_URI, label: 'primary' },
-    { uri: process.env.MONGODB_URI_FALLBACK, label: 'fallback' },
-    ...(allowLocalMongoFallback
-      ? [
-          {
-            uri: process.env.MONGODB_URI_LOCAL || 'mongodb://127.0.0.1:27017/curalink?directConnection=true',
-            label: 'local'
-          }
-        ]
-      : [])
-  ];
+  const candidates = [];
+  const seenUris = new Set();
 
-  const seen = new Set();
-  return candidates.filter((candidate) => {
-    if (!candidate.uri || seen.has(candidate.uri)) {
-      return false;
+  const pushCandidate = (uri, label) => {
+    const normalized = typeof uri === 'string' ? uri.trim() : '';
+    if (!normalized || seenUris.has(normalized)) {
+      return;
     }
 
-    seen.add(candidate.uri);
-    return true;
-  });
+    seenUris.add(normalized);
+    candidates.push({ uri: normalized, label });
+  };
+
+  pushCandidate(process.env.MONGODB_URI, 'primary');
+  pushCandidate(process.env.MONGODB_URI_FALLBACK, 'fallback');
+
+  const allowLocalFallback = (process.env.MONGODB_ALLOW_LOCAL_FALLBACK || 'false').toLowerCase() === 'true';
+  if (allowLocalFallback) {
+    pushCandidate(process.env.MONGODB_URI_LOCAL, 'local');
+  }
+
+  if (candidates.length === 0) {
+    logger.error('No MongoDB URI configured. Set MONGODB_URI (and optional fallback/local variables).');
+  }
+
+  return candidates;
 }
 
 async function connectMongoUri(uri, label) {
@@ -124,11 +128,11 @@ async function connectMongoUri(uri, label) {
     await mongoose.connect(uri, mongoOptions);
     mongoLastError = null;
     mongoMode = label;
-    console.log(`MongoDB connected (${label})`);
+    logger.info(`MongoDB connected (${label})`);
     return true;
   } catch (err) {
     mongoLastError = err.message;
-    console.error(`MongoDB connection error (${label}: ${sanitizeMongoUri(uri)}):`, err.message);
+    logger.error(`MongoDB connection error (${label}: ${sanitizeMongoUri(uri)}): ${err.message}`);
     return false;
   }
 }
@@ -151,7 +155,7 @@ async function connectInMemoryMongo() {
     return connected;
   } catch (err) {
     mongoLastError = `In-memory MongoDB unavailable: ${err.message}`;
-    console.error('MongoDB in-memory fallback error:', err.message);
+    logger.error(`MongoDB in-memory fallback error: ${err.message}`);
     return false;
   }
 }
@@ -225,7 +229,7 @@ app.use('/api', (req, res, next) => {
 
   if (mongoose.connection.readyState !== 1) {
     return res.status(503).json({
-      error: `Database is unavailable (mode: ${mongoMode}). Verify database connectivity and retry.`
+      error: `Database is unavailable. Verify database connectivity and retry.`
     });
   }
 
@@ -237,7 +241,7 @@ app.use('/api', queryRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/export', exportRoutes);
 
-app.get('/api/health', async (req, res) => {
+async function healthHandler(req, res) {
   const llmServiceUrl = process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001';
   let llmStatus = 'offline';
   let llmProvider = null;
@@ -298,7 +302,10 @@ app.get('/api/health', async (req, res) => {
     llmQuality,
     timestamp: new Date().toISOString()
   });
-});
+}
+
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
 
 async function shutdown() {
   stopAnalyticsScheduler();
@@ -345,17 +352,17 @@ export function startServer(port = PORT) {
   }
 
   httpServer = app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+    logger.info(`Server running on port ${port}`);
     startAnalyticsScheduler();
   });
 
   httpServer.on('error', (err) => {
     if (err?.code === 'EADDRINUSE') {
-      console.error(`Port ${port} is already in use. Stop the existing process or set PORT.`);
+      logger.error(`Port ${port} is already in use. Stop the existing process or set PORT.`);
       return;
     }
 
-    console.error('HTTP server failed to start:', err?.message || err);
+    logger.error(`HTTP server failed to start: ${err?.message || err}`);
   });
 
   return httpServer;
