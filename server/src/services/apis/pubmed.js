@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { parseStringPromise } from 'xml2js';
+import logger from '../../../lib/logger.js';
 
 const BASE_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
 const EMAIL = process.env.PUBMED_EMAIL || 'curalink@demo.com';
@@ -20,7 +21,7 @@ async function searchPubMed(query, maxResults = 200, sort = 'pub date') {
     const { data } = await axios.get(url, { params, timeout: 15000 });
     return data?.esearchresult?.idlist || [];
   } catch (err) {
-    console.error('PubMed search error:', err.message);
+    logger.error(`PubMed search error: ${err.message}`);
     return [];
   }
 }
@@ -115,7 +116,7 @@ async function fetchPubMedDetails(ids) {
 
       await new Promise((resolve) => setTimeout(resolve, 350));
     } catch (err) {
-      console.error(`PubMed batch ${i} error:`, err.message);
+      logger.error(`PubMed batch ${i} error: ${err.message}`);
     }
   }
 
@@ -128,11 +129,11 @@ export async function fetchFromPubMed(query, maxResults = 200, sort = 'pub date'
   }
 
   const startTime = Date.now();
-  console.log(`PubMed searching: "${query}"`);
+  logger.info(`PubMed searching: "${query}"`);
 
   const ids = await searchPubMed(query, maxResults, sort);
   const articles = await fetchPubMedDetails(ids);
 
-  console.log(`PubMed fetched ${articles.length} articles in ${Date.now() - startTime}ms`);
+  logger.info(`PubMed fetched ${articles.length} articles in ${Date.now() - startTime}ms`);
   return articles;
 }

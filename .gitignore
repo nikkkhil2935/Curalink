@@ -16,6 +16,15 @@ venv/
 dist/
 build/
 
+# Logs
+*.log
+logs/
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Python venvs (full)
+**/.venv/
+**/__pycache__/
+**/*.pyc

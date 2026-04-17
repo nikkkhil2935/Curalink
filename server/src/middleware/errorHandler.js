@@ -1,9 +1,10 @@
 import mongoose from 'mongoose';
+import logger from '../lib/logger.js';
 
 export function errorHandler(err, req, res, next) {
   const message = err?.message || 'Internal server error';
 
-  console.error('Error:', message);
+  logger.error('Error:', message);
 
   if (err?.name === 'ValidationError' || err?.name === 'CastError' || err?.name === 'BSONError') {
     return res.status(400).json({

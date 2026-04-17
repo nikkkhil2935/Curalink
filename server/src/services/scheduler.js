@@ -36,7 +36,7 @@ async function captureAnalyticsSnapshot(reason = 'scheduled') {
       }
     });
   } catch (error) {
-    console.error('Analytics snapshot scheduler error:', error.message);
+    logger.error('Analytics snapshot scheduler error:', error.message);
   } finally {
     snapshotInProgress = false;
   }
@@ -50,8 +50,10 @@ export function startAnalyticsScheduler() {
 
   const cronExpr = process.env.ANALYTICS_SNAPSHOT_CRON || '0 * * * *';
 
+  import logger from '../lib/logger.js';
+  
   if (!cron.validate(cronExpr)) {
-    console.error(`Invalid ANALYTICS_SNAPSHOT_CRON: ${cronExpr}`);
+    logger.error(`Invalid ANALYTICS_SNAPSHOT_CRON: ${cronExpr}`);
     return;
   }
 

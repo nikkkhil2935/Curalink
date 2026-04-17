@@ -8,6 +8,7 @@ import { rerankCandidates, selectForContext, computeEvidenceStrength } from './r
 import { buildRAGContext, buildSystemPrompt, buildUserPrompt } from './contextPackager.js';
 import { callLLM, parseLLMResponse, semanticRerank } from '../llm.js';
 import SourceDoc from '../../models/SourceDoc.js';
+import logger from '../../lib/logger.js';
 import Analytics from '../../models/Analytics.js';
 
 export async function runRetrievalPipeline(session, userMessage, conversationHistory = []) {
@@ -32,11 +33,11 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     }
   }
 
-  console.log(`Starting retrieval for query: "${expanded.fullQuery}"`);
+  logger.info(`Starting retrieval for query: "${expanded.fullQuery}"`);
   const [pubmedResults, openalexResults, ctResults] = await Promise.all([
-    fetchFromPubMed(expanded.pubmedQuery, 200, strategy.pubmedSort),
-    fetchFromOpenAlex(expanded.openalexQuery, 200),
-    fetchFromClinicalTrials(expanded.ctCondition, expanded.ctIntervention, session.location, 100)
+fetchFromPubMed(expanded.pubmedQuery, Number(process.env.RETRIEVAL_PUBMED_MAX || 200), strategy.pubmedSort),
+    fetchFromOpenAlex(expanded.openalexQuery, Number(process.env.RETRIEVAL_OPENALEX_MAX || 200)),
+    fetchFromClinicalTrials(expanded.ctCondition, expanded.ctIntervention, session.location, Number(process.env.RETRIEVAL_CT_MAX || 100))
   ]);
 
   const stats = {
@@ -70,7 +71,7 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
         noEvidence: true
       }
     }).catch((err) => {
-      console.error('Analytics logging error:', err.message);
+      logger.error('Analytics logging error: ${err.message}');
     });
 
     return {
@@ -138,8 +139,8 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
   });
 
   if (upsertOps.length) {
-    await SourceDoc.bulkWrite(upsertOps, { ordered: false }).catch((err) => {
-      console.error('SourceDoc upsert error:', err.message);
+  await SourceDoc.bulkWrite(upsertOps, { ordered: false }).catch((err) => {
+      logger.error('SourceDoc upsert error: ${err.message}');
     });
   }
 

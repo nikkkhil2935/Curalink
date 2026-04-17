@@ -1,4 +1,5 @@
 import axios from 'axios';
+import logger from '../lib/logger.js';
 
 const LLM_SERVICE_URL = process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001';
 
@@ -36,7 +37,7 @@ export async function getEmbeddings(texts) {
     const { data } = await axios.post(`${LLM_SERVICE_URL}/embed`, { texts }, { timeout: 30000 });
     return data.embeddings;
   } catch (err) {
-    console.warn('Embedding service unavailable, falling back to keyword scoring');
+    logger.warn('Embedding service unavailable, falling back to keyword scoring');
     return null;
   }
 }
@@ -76,7 +77,7 @@ export async function semanticRerank(query, documents) {
       }))
       .sort((a, b) => b.finalScore - a.finalScore);
   } catch (err) {
-    console.warn('Semantic reranking failed, using keyword scores');
+    logger.warn('Semantic reranking failed, using keyword scores');
     return documents;
   }
 }
