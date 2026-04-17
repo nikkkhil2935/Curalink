@@ -27,6 +27,8 @@ const allowWildcardCors = !isProduction && configuredOrigins.length === 0;
 
 let mongoLastError = null;
 let mongoRetryHandle = null;
+let mongoMode = 'disconnected';
+let memoryServer = null;
 
 const mongoRetryMs = Number.parseInt(process.env.MONGODB_RETRY_MS || '15000', 10);
 const mongoOptions = {
@@ -92,61 +94,34 @@ function sanitizeMongoUri(uri) {
   }
 }
 
-async function connectMongo() {
-  const uri = process.env.MONGODB_URI;
-  if (!uri) {
-    logger.error('MONGODB_URI not set');
-    return false;
-  }
-  try {
-    await mongoose.connect(uri, mongoOptions);
-    logger.info('MongoDB connected');
-    return true;
-  } catch (err) {
-    logger.error(`MongoDB connection error (${sanitizeMongoUri(uri)}): ${err.message}`);
-    return false;
-  }
-}
+function getMongoCandidates() {
+  const candidates = [];
+  const seenUris = new Set();
 
-function scheduleMongoReconnect() {
-  if (mongoRetryHandle) return;
-  mongoRetryHandle = setTimeout(async () => {
-    mongoRetryHandle = null;
-    if (mongoose.connection.readyState !== 1) {
-      await bootstrapMongoConnection();
+  const pushCandidate = (uri, label) => {
+    const normalized = typeof uri === 'string' ? uri.trim() : '';
+    if (!normalized || seenUris.has(normalized)) {
+      return;
     }
-  }, mongoRetryMs);
-}
 
-async function bootstrapMongoConnection() {
-  if (mongoose.connection.readyState === 1) return;
-  const connected = await connectMongo();
-  if (!connected) {
-    scheduleMongoReconnect();
+    seenUris.add(normalized);
+    candidates.push({ uri: normalized, label });
+  };
+
+  pushCandidate(process.env.MONGODB_URI, 'primary');
+  pushCandidate(process.env.MONGODB_URI_FALLBACK, 'fallback');
+
+  const allowLocalFallback = (process.env.MONGODB_ALLOW_LOCAL_FALLBACK || 'false').toLowerCase() === 'true';
+  if (allowLocalFallback) {
+    pushCandidate(process.env.MONGODB_URI_LOCAL, 'local');
   }
-}
 
-mongoose.connection.on('error', (err) => {
-  mongoLastError = err.message;
-  scheduleMongoReconnect();
-});
-
-mongoose.connection.on('disconnected', () => {
-  scheduleMongoReconnect();
-});
-
-mongoose.connection.on('connected', () => {
-  mongoLastError = null;
-  if (mongoRetryHandle) {
-    clearTimeout(mongoRetryHandle);
-    mongoRetryHandle = null;
+  if (candidates.length === 0) {
+    logger.error('No MongoDB URI configured. Set MONGODB_URI (and optional fallback/local variables).');
   }
-});
 
-bootstrapMongoConnection().catch((err) => {
-  mongoLastError = err.message;
-  scheduleMongoReconnect();
-});
+  return candidates;
+}
 
 async function connectMongoUri(uri, label) {
   try {
@@ -266,7 +241,7 @@ app.use('/api', queryRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/export', exportRoutes);
 
-app.get('/api/health', async (req, res) => {
+async function healthHandler(req, res) {
   const llmServiceUrl = process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001';
   let llmStatus = 'offline';
   let llmProvider = null;
@@ -327,7 +302,10 @@ app.get('/api/health', async (req, res) => {
     llmQuality,
     timestamp: new Date().toISOString()
   });
-});
+}
+
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
 
 async function shutdown() {
   stopAnalyticsScheduler();

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/Nikhil/Desktop/Curalink/server/src -type f -exec ls -lh {} \\\\;)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(sort -k2)",
+      "Bash(find /c/Users/Nikhil/Desktop/Curalink/client/src -type f -exec ls -lh {} \\\\;)"
+    ]
+  }
+}

@@ -3,8 +3,13 @@ import mongoose from 'mongoose';
 import Session from '../models/Session.js';
 import Message from '../models/Message.js';
 import { runRetrievalPipeline } from '../services/pipeline/orchestrator.js';
+import { gzipCompression } from '../middleware/gzipCompression.js';
+import { invalidateSessionInsightsCache } from '../services/insightsCache.js';
+import { applyHealthResponseContractPatch } from '../services/healthContract.js';
 
 const router = express.Router();
+applyHealthResponseContractPatch();
+router.use(gzipCompression());
 
 router.post('/sessions/:id/query', async (req, res, next) => {
   try {
@@ -35,13 +40,13 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       responseText,
       structuredAnswer,
       contextDocs,
-      evidenceDocs,
       stats,
       evidenceStrength,
       intentType,
       expandedQuery,
       contextBadge,
-      sourceIndex
+      sourceIndex,
+      trace
     } = await runRetrievalPipeline(session, cleanedMessage, conversationHistory.reverse());
 
     const createMessagesAndUpdateSession = async (dbSession = null) => {
@@ -117,21 +122,20 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       return acc;
     }, {});
 
-    const sourceDocsForPanel = Array.isArray(evidenceDocs) && evidenceDocs.length
-      ? evidenceDocs
-      : (contextDocs || []);
-
-    const sourcesWithCitations = sourceDocsForPanel.map((doc) => ({
+    const sourcesWithCitations = (contextDocs || []).map((doc) => ({
       ...doc,
       citationId: idToCitation[String(doc.id)] || null
     }));
+
+    invalidateSessionInsightsCache(session._id);
 
     return res.json({
       message: assistantMessage,
       sources: sourcesWithCitations,
       stats,
       evidenceStrength,
-      sourceIndex
+      sourceIndex,
+      trace
     });
   } catch (err) {
     return next(err);

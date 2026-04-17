@@ -1,66 +1,78 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Activity, Beaker, FileText, Database, Layers, ArrowRight,  } from 'lucide-react';
+import { Activity, FlaskConical, Layers, Server, Plus, Microscope } from 'lucide-react';
 import ThemeToggle from '@/components/ui/ThemeToggle.jsx';
-import Button from '@/components/ui/Button.jsx';
 import { cn } from '@/lib/utils.js';
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Research', icon: Beaker },
+  { to: '/', label: 'Research', icon: Microscope, exact: true },
   { to: '/platform', label: 'Platform', icon: Layers },
   { to: '/analytics', label: 'Analytics', icon: Activity },
-  { to: '/status', label: 'Status', icon: Database }
+  { to: '/status', label: 'Status', icon: Server },
 ];
 
 export default function AppTopNav({ className = '' }) {
   const navigate = useNavigate();
 
   return (
-    <header className={cn("sticky top-0 z-40 w-full border-b border-[#24324a] bg-[#101726]/80 backdrop-blur-md", className)}>
+    <header className={cn('cl-nav sticky top-0 z-40 w-full', className)}>
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+
+        {/* Brand */}
         <div className="flex items-center gap-6">
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="group flex items-center gap-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-md"
+            className="group flex items-center gap-2.5 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 font-bold text-white shadow-sm transition-transform group-hover:scale-105">
-              C
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 shadow-sm shadow-blue-500/30 transition-transform group-hover:scale-105">
+              <FlaskConical className="h-4 w-4 text-white" />
             </div>
-            <span className="font-bold tracking-tight text-white hidden sm:block">Curalink</span>
+            <span
+              className="hidden sm:block font-bold tracking-tight"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              Curalink
+            </span>
+            <span
+              className="hidden md:block text-[10px] font-medium px-1.5 py-0.5 rounded"
+              style={{
+                background: 'rgba(59,130,246,0.12)',
+                color: '#60a5fa',
+                border: '1px solid rgba(59,130,246,0.25)',
+              }}
+            >
+              AI Research
+            </span>
           </button>
 
-          <nav className="hidden md:flex items-center space-x-1" aria-label="Primary Navigation">
+          <nav className="hidden md:flex items-center gap-1" aria-label="Primary Navigation">
             {NAV_ITEMS.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
+                end={item.exact}
                 className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-200",
-                    isActive
-                      ? "bg-[#1a263a] text-blue-400 border border-[#24324a]"
-                      : "text-[#c6d3eb] hover:bg-[#131d2d] hover:text-white border border-transparent"
-                  )
+                  cn('cl-nav-link', isActive && 'active')
                 }
               >
-                <item.icon className="h-4 w-4 opacity-70" />
+                <item.icon className="h-3.5 w-3.5 opacity-75" />
                 {item.label}
               </NavLink>
             ))}
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Right actions */}
+        <div className="flex items-center gap-2.5">
           <ThemeToggle />
-          <Button
-            onClick={() => { navigate('/'); }}
-            size="sm"
-            variant="primary"
-            className="hidden sm:inline-flex shadow-sm bg-blue-600 hover:bg-blue-500 text-white gap-2 flex-row rounded-md h-9 px-4 text-xs font-semibold tracking-wide border-none"
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="cl-btn-primary hidden sm:inline-flex h-8 px-3 text-xs gap-1.5"
           >
-            New Session
-            <ArrowRight className="h-4 w-4" />
-          </Button>
+            <Plus className="h-3.5 w-3.5" />
+            New Research
+          </button>
         </div>
       </div>
     </header>

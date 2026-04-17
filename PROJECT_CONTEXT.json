@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-17T10:47:08.038Z",
+  "generatedAt": "2026-04-17T11:18:50.082Z",
   "workspaceName": "Curalink",
   "services": [
     {
@@ -498,6 +498,7 @@
     "  - server/.env.example",
     "  - server/package-lock.json",
     "  - server/package.json",
+    "- .env.example",
     "- .gitignore",
     "- DAY1_IMPLEMENTATION.md",
     "- DAY2_IMPLEMENTATION.md",

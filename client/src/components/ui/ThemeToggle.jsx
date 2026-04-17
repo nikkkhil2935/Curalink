@@ -1,11 +1,11 @@
 import { useRef } from 'react';
-import { Laptop, Moon, Sun } from 'lucide-react';
+import { Monitor, Moon, Sun } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme.js';
 
 const THEME_ITEMS = [
-  { id: 'light', label: 'Light theme', Icon: Sun },
-  { id: 'dark', label: 'Dark theme', Icon: Moon },
-  { id: 'system', label: 'System theme', Icon: Laptop },
+  { id: 'light',  label: 'Light theme',  Icon: Sun     },
+  { id: 'system', label: 'System theme', Icon: Monitor },
+  { id: 'dark',   label: 'Dark theme',   Icon: Moon    },
 ];
 
 export default function ThemeToggle({ className = '' }) {
@@ -57,7 +57,7 @@ export default function ThemeToggle({ className = '' }) {
           tabIndex={mode === item.id ? 0 : -1}
           data-active={mode === item.id}
           onClick={() => setMode(item.id)}
-          className="theme-toggle-button"
+          className="theme-toggle-btn"
         >
           <item.Icon size={15} />
         </button>

@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Session from '../models/Session.js';
 import Analytics from '../models/Analytics.js';
 import SourceDoc from '../models/SourceDoc.js';
+import logger from '../lib/logger.js';
 
 let snapshotJob = null;
 let snapshotInProgress = false;
@@ -49,8 +50,6 @@ export function startAnalyticsScheduler() {
   }
 
   const cronExpr = process.env.ANALYTICS_SNAPSHOT_CRON || '0 * * * *';
-
-  import logger from '../lib/logger.js';
   
   if (!cron.validate(cronExpr)) {
     logger.error(`Invalid ANALYTICS_SNAPSHOT_CRON: ${cronExpr}`);

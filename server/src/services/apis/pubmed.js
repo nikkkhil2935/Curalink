@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { parseStringPromise } from 'xml2js';
-import logger from '../../../lib/logger.js';
+import logger from '../../lib/logger.js';
 
 const BASE_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
 const EMAIL = process.env.PUBMED_EMAIL || 'curalink@demo.com';

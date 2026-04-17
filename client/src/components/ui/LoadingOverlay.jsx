@@ -1,37 +1,42 @@
-import React from 'react';
-
 const STEPS = [
   'Query expansion',
   'PubMed fetch',
   'OpenAlex fetch',
   'ClinicalTrials fetch',
-  'Re-ranking process',
-  'AI synthesis'
+  'Re-ranking',
+  'AI synthesis',
 ];
 
-export default function LoadingOverlay({ message = 'Processing request...', steps }) {
-  const renderedSteps = Array.isArray(steps) && steps.length > 0 ? steps : STEPS;
+export default function LoadingOverlay({ message = 'Processing…', steps }) {
+  const rendered = Array.isArray(steps) && steps.length > 0 ? steps : STEPS;
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 bg-gray-900 rounded-xl border border-gray-800">
-      <div className="relative mb-6">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-800 border-t-blue-500" />
-        <div 
-          className="absolute inset-0 h-12 w-12 animate-spin rounded-full border-4 border-transparent border-t-cyan-400" 
-          style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} 
+    <div
+      className="flex flex-col items-center justify-center p-6 rounded-xl"
+      style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}
+    >
+      <div className="relative mb-5">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-transparent" style={{ borderTopColor: '#3b82f6' }} />
+        <div
+          className="absolute inset-0 h-10 w-10 animate-spin rounded-full border-4 border-transparent"
+          style={{ borderTopColor: '#22d3ee', animationDirection: 'reverse', animationDuration: '1.4s' }}
         />
       </div>
-
-      {message ? <p className="mb-4 text-sm text-gray-300">{message}</p> : null}
-      
-      <div className="space-y-3 w-full max-w-xs">
-        {renderedSteps.map((step, idx) => (
-          <div key={step} className="flex items-center space-x-3">
-            <div 
-              className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" 
-              style={{ animationDelay: idx * 150 + 'ms' }}
+      {message && (
+        <p className="text-sm mb-4 font-medium" style={{ color: 'var(--text-secondary)' }}>
+          {message}
+        </p>
+      )}
+      <div className="space-y-2 w-full max-w-[220px]">
+        {rendered.map((step, idx) => (
+          <div key={step} className="flex items-center gap-2.5">
+            <span
+              className="pipeline-dot animate-pulse"
+              style={{ animationDelay: `${idx * 140}ms` }}
             />
-            <span className="text-sm text-gray-400 font-medium tracking-wide">{step}</span>
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              {step}
+            </span>
           </div>
         ))}
       </div>

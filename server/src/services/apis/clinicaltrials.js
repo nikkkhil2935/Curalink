@@ -1,5 +1,5 @@
 import axios from 'axios';
-import logger from '../../../lib/logger.js';
+import logger from '../../lib/logger.js';
 
 const BASE_URL = 'https://clinicaltrials.gov/api/v2/studies';
 
@@ -167,7 +167,7 @@ export async function fetchFromClinicalTrials(
 
       await new Promise((resolve) => setTimeout(resolve, 300));
     } catch (err) {
-      logger.error('ClinicalTrials fetch error: ${err.message}');
+      logger.error(`ClinicalTrials fetch error: ${err.message}`);
     }
   }
 

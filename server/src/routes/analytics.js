@@ -1,33 +1,36 @@
 import express from 'express';
-import Analytics from '../models/Analytics.js';
-import SourceDoc from '../models/SourceDoc.js';
-import Session from '../models/Session.js';
-import Message from '../models/Message.js';
+import mongoose from 'mongoose';
+import {
+  getIntentBreakdown,
+  getOverviewAnalytics,
+  getSessionBreakdownAnalytics,
+  getSnapshots,
+  getSourceStats,
+  getTopDiseases,
+  getTrialStatus
+} from '../services/analyticsService.js';
+import { gzipCompression } from '../middleware/gzipCompression.js';
 
 const router = express.Router();
+router.use(gzipCompression());
+
+function parseBoundedInteger(rawValue, fallback, min, max) {
+  const parsed = Number.parseInt(String(rawValue ?? fallback), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function hasValidSessionId(value) {
+  return mongoose.Types.ObjectId.isValid(value);
+}
 
 router.get('/top-diseases', async (req, res, next) => {
   try {
-    const results = await Analytics.aggregate([
-      { $match: { event: 'query', disease: { $exists: true, $ne: null } } },
-      { $group: { _id: '$disease', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 10 }
-    ]);
-
-    const diseases = results.map((entry) => ({
-      name: entry._id,
-      count: entry.count
-    }));
-
-    return res.json({
-      diseases,
-      // Backward compatibility for existing dashboard shape.
-      topDiseases: diseases.map((entry) => ({
-        disease: entry.name,
-        count: entry.count
-      }))
-    });
+    const response = await getTopDiseases(10);
+    return res.json(response);
   } catch (err) {
     return next(err);
   }
@@ -35,18 +38,8 @@ router.get('/top-diseases', async (req, res, next) => {
 
 router.get('/intent-breakdown', async (req, res, next) => {
   try {
-    const results = await Analytics.aggregate([
-      { $match: { event: 'query', intentType: { $exists: true, $ne: null } } },
-      { $group: { _id: '$intentType', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
-
-    return res.json({
-      intents: results.map((entry) => ({
-        name: entry._id,
-        count: entry.count
-      }))
-    });
+    const response = await getIntentBreakdown();
+    return res.json(response);
   } catch (err) {
     return next(err);
   }
@@ -54,35 +47,8 @@ router.get('/intent-breakdown', async (req, res, next) => {
 
 router.get('/source-stats', async (req, res, next) => {
   try {
-    const results = await SourceDoc.aggregate([
-      {
-        $group: {
-          _id: '$source',
-          count: { $sum: 1 },
-          totalUsed: { $sum: { $ifNull: ['$timesUsed', 0] } }
-        }
-      },
-      { $sort: { count: -1 } }
-    ]);
-
-    const sources = results.map((entry) => ({
-      name: entry._id,
-      count: entry.count,
-      used: entry.totalUsed || 0
-    }));
-
-    const total = sources.reduce((sum, entry) => sum + entry.count, 0);
-
-    return res.json({
-      sources,
-      total,
-      // Backward compatibility for existing dashboard shape.
-      distribution: sources.map((entry) => ({
-        source: entry.name,
-        count: entry.count,
-        percentage: total > 0 ? Number(((entry.count / total) * 100).toFixed(2)) : 0
-      }))
-    });
+    const response = await getSourceStats();
+    return res.json(response);
   } catch (err) {
     return next(err);
   }
@@ -90,49 +56,28 @@ router.get('/source-stats', async (req, res, next) => {
 
 router.get('/overview', async (req, res, next) => {
   try {
-    const [totalSessions, totalQueries, totalSources, recentQueries, avgStats] = await Promise.all([
-      Session.countDocuments(),
-      Analytics.countDocuments({ event: 'query' }),
-      SourceDoc.countDocuments(),
-      Analytics.find({ event: 'query' })
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .select('disease intentType metadata createdAt')
-        .lean(),
-      Message.aggregate([
-        {
-          $match: {
-            role: 'assistant',
-            'retrievalStats.totalCandidates': { $gt: 0 }
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            avgCandidates: { $avg: '$retrievalStats.totalCandidates' },
-            avgReranked: { $avg: '$retrievalStats.rerankedTo' },
-            avgTimeMs: { $avg: '$retrievalStats.timeTakenMs' }
-          }
-        }
-      ])
-    ]);
+    const days = parseBoundedInteger(req.query.days, 14, 1, 90);
+    const response = await getOverviewAnalytics({ days });
+    return res.json(response);
+  } catch (err) {
+    return next(err);
+  }
+});
 
-    const stats = avgStats[0] || {};
+router.get('/sessions/:id/breakdown', async (req, res, next) => {
+  try {
+    if (!hasValidSessionId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
 
-    return res.json({
-      totalSessions,
-      totalQueries,
-      totalSources,
-      avgCandidatesRetrieved: Math.round(stats.avgCandidates || 0),
-      avgShownToUser: Math.round(stats.avgReranked || 0),
-      avgResponseTimeSec: ((stats.avgTimeMs || 0) / 1000).toFixed(1),
-      recentQueries: recentQueries.map((query) => ({
-        disease: query.disease || 'Unknown',
-        intentType: query.intentType || 'GENERAL',
-        candidates: query.metadata?.stats?.totalCandidates || 0,
-        time: query.createdAt
-      }))
-    });
+    const days = parseBoundedInteger(req.query.days, 14, 1, 90);
+    const response = await getSessionBreakdownAnalytics(req.params.id, { days });
+
+    if (!response) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    return res.json(response);
   } catch (err) {
     return next(err);
   }
@@ -140,18 +85,8 @@ router.get('/overview', async (req, res, next) => {
 
 router.get('/trial-status', async (req, res, next) => {
   try {
-    const results = await SourceDoc.aggregate([
-      { $match: { type: 'trial' } },
-      { $group: { _id: '$status', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
-
-    return res.json({
-      statuses: results.map((entry) => ({
-        name: entry._id || 'Unknown',
-        count: entry.count
-      }))
-    });
+    const response = await getTrialStatus();
+    return res.json(response);
   } catch (err) {
     return next(err);
   }
@@ -159,27 +94,9 @@ router.get('/trial-status', async (req, res, next) => {
 
 router.get('/snapshots', async (req, res, next) => {
   try {
-    const requestedLimit = Number.parseInt(String(req.query.limit || '24'), 10);
-    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 168)) : 24;
-
-    const records = await Analytics.find(
-      { event: 'system_snapshot' },
-      { metadata: 1, createdAt: 1 }
-    )
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
-
-    const snapshots = records
-      .reverse()
-      .map((record) => ({
-        time: record.createdAt,
-        totalSessions: Number(record.metadata?.totalSessions || 0),
-        totalQueries: Number(record.metadata?.totalQueries || 0),
-        totalSources: Number(record.metadata?.totalSources || 0)
-      }));
-
-    return res.json({ snapshots });
+    const limit = parseBoundedInteger(req.query.limit, 24, 1, 168);
+    const response = await getSnapshots(limit);
+    return res.json(response);
   } catch (err) {
     return next(err);
   }

@@ -1,6 +1,6 @@
 # PROJECT CONTEXT
 
-Last Updated: 2026-04-17T10:47:08.038Z
+Last Updated: 2026-04-17T11:18:50.082Z
 Workspace: Curalink
 
 ## What This Is
@@ -181,6 +181,7 @@ Workspace: Curalink
   - server/.env.example
   - server/package-lock.json
   - server/package.json
+- .env.example
 - .gitignore
 - DAY1_IMPLEMENTATION.md
 - DAY2_IMPLEMENTATION.md

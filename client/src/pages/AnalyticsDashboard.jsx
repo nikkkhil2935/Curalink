@@ -1,43 +1,88 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, PieChart, Pie, AreaChart, Area } from 'recharts';
-import { Activity, Clock, Database, Search, ArrowLeft, TrendingUp, Layers, Zap } from 'lucide-react';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell,
+  PieChart, Pie, Legend,
+} from 'recharts';
+import {
+  Activity, Clock, Database, Search, ArrowLeft, TrendingUp, Layers,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import AppTopNav from '../components/layout/AppTopNav';
 import ErrorBanner from '../components/ui/ErrorBanner';
-import LoadingOverlay from '../components/ui/LoadingOverlay';
 import { api } from '../utils/api';
 
 const COLORS = ['#60a5fa', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#818cf8'];
 
-const MotionCard = ({ children, delay = 0, className = '' }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 15 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.5, delay }}
-    className={`rounded-2xl bg-gray-900 shadow-sm overflow-hidden ${className}`}
-  >
-    {children}
-  </motion.div>
-);
+const fadeUp = {
+  initial: { opacity: 0, y: 14 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.45 },
+};
 
-const StatBadge = ({ title, value, icon: Icon, trend }) => (
-  <div className="flex items-start justify-between p-6">
-    <div>
-      <p className="text-sm font-medium text-gray-400 mb-1">{title}</p>
-      <h3 className="text-3xl font-bold text-white tracking-tight">{value}</h3>
-      {trend && (
-        <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
-          <TrendingUp size={12} className="text-blue-400" />
-          <span className="text-blue-400 font-medium">{trend}</span> since last week
-        </p>
-      )}
+function Card({ children, delay = 0, className = '' }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay }}
+      className={`rounded-2xl overflow-hidden ${className}`}
+      style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function StatCard({ title, value, icon: Icon, trend, delay }) {
+  return (
+    <Card delay={delay}>
+      <div className="flex items-start justify-between p-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--text-muted)' }}>
+            {title}
+          </p>
+          <h3 className="text-2xl font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+            {value}
+          </h3>
+          {trend && (
+            <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: '#34d399' }}>
+              <TrendingUp className="h-3 w-3" />
+              {trend}
+            </p>
+          )}
+        </div>
+        <div
+          className="p-2.5 rounded-xl"
+          style={{ background: 'var(--color-surface-3)', border: '1px solid var(--color-border)' }}
+        >
+          <Icon className="h-4 w-4" style={{ color: 'var(--text-muted)' }} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div
+      className="rounded-xl px-3 py-2 text-xs shadow-xl"
+      style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', color: 'var(--text-primary)' }}
+    >
+      <p className="font-semibold mb-0.5">{label}</p>
+      <p style={{ color: COLORS[0] }}>{payload[0].value}</p>
     </div>
-    <div className="p-3 bg-gray-800/50 rounded-xl">
-      <Icon className="text-gray-300" size={20} />
-    </div>
-  </div>
-);
+  );
+}
+
+function SectionTitle({ children }) {
+  return (
+    <h3 className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+      {children}
+    </h3>
+  );
+}
 
 export default function AnalyticsDashboard() {
   const [data, setData] = useState(null);
@@ -45,7 +90,7 @@ export default function AnalyticsDashboard() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchAnalytics = async () => {
+    const fetch = async () => {
       try {
         setLoading(true);
         const [overviewRes, diseasesRes, intentsRes, sourcesRes, trialsRes] = await Promise.all([
@@ -53,164 +98,230 @@ export default function AnalyticsDashboard() {
           api.get('/analytics/top-diseases').catch(() => ({ data: {} })),
           api.get('/analytics/intent-breakdown').catch(() => ({ data: {} })),
           api.get('/analytics/source-stats').catch(() => ({ data: {} })),
-          api.get('/analytics/trial-status').catch(() => ({ data: {} }))
+          api.get('/analytics/trial-status').catch(() => ({ data: {} })),
         ]);
-
         setData({
-          overview: overviewRes.data || { totalQueries: 0, totalSources: 0, avgResponseTimeSec: 0, recentQueries: [] },
+          overview: overviewRes.data || {},
           diseases: diseasesRes.data.diseases || diseasesRes.data.topDiseases || [],
           intents: intentsRes.data.intents || [],
           sources: sourcesRes.data.sources || sourcesRes.data.distribution || [],
-          trials: trialsRes.data.statuses || []
+          trials: trialsRes.data.statuses || [],
         });
       } catch (err) {
-        console.error(err);
-        setError('Unable to load analytics data at this time.');
+        setError('Unable to load analytics data.');
       } finally {
         setLoading(false);
       }
     };
-    fetchAnalytics();
+    fetch();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex flex-col pt-16 items-center justify-center">
-        <AppTopNav borderless />
-        <LoadingOverlay message="Gathering Analytics..." />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-200 selection:bg-blue-500/30 font-sans">
-      <AppTopNav borderless />
-      
-      <main className="max-w-7xl mx-auto px-6 py-20 lg:py-24">
-        <div className="mb-10">
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-            <Link to="/app" className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-white transition-colors mb-4">
-              <ArrowLeft size={16} className="mr-2" /> Back to Research
-            </Link>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Platform Analytics</h1>
-            <p className="text-gray-400 mt-1">Real-time insights on query volume and source retrieval</p>
-          </motion.div>
-        </div>
+    <div className="min-h-screen" style={{ background: 'var(--color-canvas)', color: 'var(--text-primary)' }}>
+      <AppTopNav />
 
-        {error && <ErrorBanner message={error} onDismiss={() => setError(null)} className="mb-8" />}
+      <main className="max-w-6xl mx-auto px-5 py-20 lg:py-24">
+        {/* Page header */}
+        <motion.div {...fadeUp} className="mb-8">
+          <Link
+            to="/app"
+            className="inline-flex items-center gap-1.5 text-xs font-medium mb-4 transition-colors"
+            style={{ color: 'var(--text-muted)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Research
+          </Link>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
+            Platform Analytics
+          </h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+            Real-time insights on query volume and source retrieval
+          </p>
+        </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <MotionCard delay={0.1}>
-            <StatBadge title="Total Queries" value={data?.overview?.totalQueries?.toLocaleString() || '0'} icon={Search} trend="+12.4%" />
-          </MotionCard>
-          <MotionCard delay={0.15}>
-            <StatBadge title="Sources Processed" value={data?.overview?.totalSources?.toLocaleString() || '0'} icon={Database} trend="+8.1%" />
-          </MotionCard>
-          <MotionCard delay={0.2}>
-            <StatBadge title="Avg Response (s)" value={data?.overview?.avgResponseTimeSec?.toFixed(1) || '0.0'} icon={Clock} />
-          </MotionCard>
-          <MotionCard delay={0.25}>
-            <StatBadge title="Avg Candidates/Query" value={data?.overview?.avgCandidatesRetrieved?.toFixed(0) || '0'} icon={Layers} />
-          </MotionCard>
-        </div>
+        {error && <ErrorBanner message={error} onClose={() => setError(null)} />}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <MotionCard delay={0.3} className="lg:col-span-2 p-6 flex flex-col">
-            <h3 className="text-lg font-semibold text-white mb-6">Top Diseases Researched</h3>
-            <div className="flex-1 w-full h-75">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data?.diseases?.slice(0, 8) || []} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#9ca3af', fontSize: 12 }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} />
-                  <Tooltip cursor={{ fill: '#1f2937' }} contentStyle={{ backgroundColor: '#111827', border: 'none', borderRadius: '8px', color: '#fff' }} />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                    {data?.diseases?.map((entry, index) => (
-                      <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+        {loading ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            {[...Array(4)].map((_, i) => (
+              <div
+                key={i}
+                className="rounded-2xl h-24 animate-pulse"
+                style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}
+              />
+            ))}
+          </div>
+        ) : (
+          <>
+            {/* Stat cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+              <StatCard delay={0.05} title="Total Queries" value={(data?.overview?.totalQueries || 0).toLocaleString()} icon={Search} trend="+12.4%" />
+              <StatCard delay={0.10} title="Sources Processed" value={(data?.overview?.totalSources || 0).toLocaleString()} icon={Database} trend="+8.1%" />
+              <StatCard delay={0.15} title="Avg Response (s)" value={(data?.overview?.avgResponseTimeSec || 0).toFixed(1)} icon={Clock} />
+              <StatCard delay={0.20} title="Avg Candidates" value={(data?.overview?.avgCandidatesRetrieved || 0).toFixed(0)} icon={Layers} />
             </div>
-          </MotionCard>
 
-          <MotionCard delay={0.4} className="p-6 flex flex-col">
-            <h3 className="text-lg font-semibold text-white mb-6">Query Intents</h3>
-            <div className="flex-1 w-full h-75">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={data?.intents || []} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="count">
-                    {data?.intents?.map((entry, index) => (
-                      <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#111827', border: 'none', borderRadius: '8px', color: '#fff' }} itemStyle={{ color: '#fff' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </MotionCard>
-        </div>
+            {/* Charts row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+              {/* Bar chart */}
+              <Card delay={0.25} className="lg:col-span-2 p-5">
+                <SectionTitle>Top Diseases Researched</SectionTitle>
+                <div style={{ height: 200 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data?.diseases?.slice(0, 8) || []} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                      <XAxis
+                        dataKey="name"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                        dy={6}
+                      />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+                      <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(96,165,250,0.06)' }} />
+                      <Bar dataKey="count" radius={[3, 3, 0, 0]}>
+                        {data?.diseases?.map((_, i) => (
+                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <MotionCard delay={0.5} className="p-6">
-             <h3 className="text-lg font-semibold text-white mb-6">Source Usage</h3>
-             <div className="space-y-4">
-                {data?.sources?.map((src, i) => (
-                  <div key={src.name} className="flex items-center justify-between group">
-                    <div className="flex items-center">
-                       <div className="w-2 h-2 rounded-full mr-3" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                       <span className="text-gray-300 font-medium text-sm">{src.name}</span>
-                    </div>
-                    <div className="text-right">
-                       <span className="text-white text-sm font-semibold">{src.count ? src.count.toLocaleString() : '0'}</span>
-                       <span className="text-gray-500 text-xs ml-2">hits</span>
-                    </div>
-                  </div>
-                ))}
-                {(!data?.sources || data.sources.length === 0) && (
-                  <p className="text-sm text-gray-500 italic">No source data available</p>
-                )}
-             </div>
-          </MotionCard>
-          
-          <MotionCard delay={0.6} className="lg:col-span-2 p-0 flex flex-col">
-            <div className="p-6 pb-2 border-b border-gray-800/50">
-              <h3 className="text-lg font-semibold text-white">Recent Queries</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-gray-800/20 text-gray-400">
-                  <tr>
-                    <th className="px-6 py-3 font-medium">Topic</th>
-                    <th className="px-6 py-3 font-medium">Intent</th>
-                    <th className="px-6 py-3 font-medium">Process Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-800/30">
-                  {data?.overview?.recentQueries?.slice(0,5).map((q, i) => (
-                    <tr key={i} className="hover:bg-gray-800/20 transition-colors">
-                      <td className="px-6 py-4 font-medium text-gray-200">{q.disease || 'General Search'}</td>
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-800 text-gray-300">
-                          {q.intentType || 'UNKNOWN'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-gray-400">
-                        {q.time ? `${(q.time / 1000).toFixed(1)}s` : 'N/A'}
-                      </td>
-                    </tr>
-                  ))}
-                  {(!data?.overview?.recentQueries || data.overview.recentQueries.length === 0) && (
-                    <tr>
-                      <td colSpan="3" className="px-6 py-8 text-center text-gray-500 text-sm">
-                        No recent queries found
-                      </td>
-                    </tr>
+              {/* Donut chart */}
+              <Card delay={0.30} className="p-5">
+                <SectionTitle>Query Intents</SectionTitle>
+                <div style={{ height: 200 }}>
+                  {data?.intents?.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={data.intents}
+                          cx="50%"
+                          cy="45%"
+                          innerRadius={50}
+                          outerRadius={70}
+                          paddingAngle={4}
+                          dataKey="count"
+                        >
+                          {data.intents.map((_, i) => (
+                            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Legend
+                          iconType="circle"
+                          iconSize={7}
+                          wrapperStyle={{ fontSize: 10, color: 'var(--text-muted)' }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: 'var(--color-surface-2)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 8,
+                            fontSize: 12,
+                            color: 'var(--text-primary)',
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-xs text-center mt-10" style={{ color: 'var(--text-muted)' }}>No intent data</p>
                   )}
-                </tbody>
-              </table>
+                </div>
+              </Card>
             </div>
-          </MotionCard>
-        </div>
+
+            {/* Sources + Table */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Source bars */}
+              <Card delay={0.35} className="p-5">
+                <SectionTitle>Source Usage</SectionTitle>
+                <div className="space-y-3">
+                  {data?.sources?.length > 0 ? data.sources.map((src, i) => {
+                    const max = Math.max(...data.sources.map((s) => s.count || 0));
+                    const pct = max > 0 ? Math.round(((src.count || 0) / max) * 100) : 0;
+                    return (
+                      <div key={src.name}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                            {src.name}
+                          </span>
+                          <span className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
+                            {(src.count || 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="rounded-full overflow-hidden" style={{ height: 4, background: 'var(--color-surface-3)' }}>
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${pct}%`, background: COLORS[i % COLORS.length] }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  }) : (
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No source data available</p>
+                  )}
+                </div>
+              </Card>
+
+              {/* Recent queries table */}
+              <Card delay={0.40} className="lg:col-span-2">
+                <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                  <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    Recent Queries
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead style={{ background: 'var(--color-surface-3)' }}>
+                      <tr>
+                        {['Topic', 'Intent', 'Time'].map((h) => (
+                          <th key={h} className="px-5 py-2.5 font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data?.overview?.recentQueries?.slice(0, 5).map((q, i) => (
+                        <tr
+                          key={i}
+                          className="border-t transition-colors"
+                          style={{ borderColor: 'var(--color-border)' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-3)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <td className="px-5 py-3 font-medium" style={{ color: 'var(--text-primary)' }}>
+                            {q.disease || 'General'}
+                          </td>
+                          <td className="px-5 py-3">
+                            <span
+                              className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                              style={{ background: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.2)' }}
+                            >
+                              {q.intentType || '—'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3" style={{ color: 'var(--text-muted)' }}>
+                            {q.time ? `${(q.time / 1000).toFixed(1)}s` : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                      {(!data?.overview?.recentQueries?.length) && (
+                        <tr>
+                          <td colSpan={3} className="px-5 py-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                            No recent queries
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
