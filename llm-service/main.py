@@ -79,7 +79,6 @@ LAST_GENERATION_PROVIDER = "none"
 LAST_GENERATION_AT: Optional[float] = None
 EMBEDDING_BACKEND = "hash-fallback"
 EMBEDDING_MODEL = "hash-fallback"
-<<<<<<< HEAD
 SEMANTIC_CACHE_TTL_SEC = max(30.0, float(os.getenv("SEMANTIC_CACHE_TTL_SEC", "300")))
 SEMANTIC_CACHE_MAX_ENTRIES = max(10, int(os.getenv("SEMANTIC_CACHE_MAX_ENTRIES", "300")))
 SEMANTIC_CACHE_SIMILARITY_THRESHOLD = max(
@@ -91,12 +90,6 @@ semantic_response_cache = SemanticLRUCache(
     ttl_seconds=SEMANTIC_CACHE_TTL_SEC,
     similarity_threshold=SEMANTIC_CACHE_SIMILARITY_THRESHOLD,
 )
-=======
-SERVICE_STARTED_AT = time.time()
-
-semantic_response_cache: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
-semantic_cache_lock = asyncio.Lock()
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
 embed_model = None
 if SentenceTransformer is not None and np is not None:
@@ -1066,7 +1059,6 @@ async def suggest(req: SuggestRequest):
     llm_service_status = "online" if is_ready else "degraded"
 
     return {
-<<<<<<< HEAD
         "status": "ok" if is_ready else "degraded",
         "version": app.version,
         "uptime_ms": int((time.time() - SERVICE_START_AT) * 1000),
@@ -1093,11 +1085,6 @@ async def suggest(req: SuggestRequest):
         },
         "effective_generation_provider": LAST_GENERATION_PROVIDER,
         "effective_generation_age_seconds": last_generation_age,
-=======
-        "suggestions": suggestions,
-        "provider": provider,
-        "model": model_name,
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     }
 
 
@@ -1110,7 +1097,6 @@ async def api_health():
 async def generate(req: GenerateRequest):
     """Generate an LLM response using a LangGraph-orchestrated RAG flow."""
     global LAST_GENERATION_PROVIDER, LAST_GENERATION_AT
-<<<<<<< HEAD
     started_at = time.perf_counter()
     logger.info("[generate:start] model=%s temp=%s", OLLAMA_MODEL, req.temperature)
 
@@ -1175,38 +1161,6 @@ async def generate(req: GenerateRequest):
     try:
         if LANGGRAPH_WORKFLOW is not None:
             workflow_started = time.perf_counter()
-=======
-    flow_start = time.perf_counter()
-    pipeline_timings: List[Dict[str, Any]] = []
-
-    try:
-        provider_errors = []
-
-        cache_lookup_start = time.perf_counter()
-        query_embedding = await generate_query_embedding(req.user_prompt)
-        cached_payload, cache_similarity = await lookup_semantic_cache(query_embedding)
-        add_stage_timing(pipeline_timings, "semantic_cache_lookup", cache_lookup_start)
-
-        if cached_payload is not None:
-            LAST_GENERATION_PROVIDER = "semantic-cache"
-            LAST_GENERATION_AT = time.time()
-
-            add_stage_timing(pipeline_timings, "total", flow_start)
-
-            return {
-                "text": cached_payload.get("text", ""),
-                "parsed": cached_payload.get("parsed"),
-                "model": cached_payload.get("model", "cached"),
-                "provider": "semantic-cache",
-                "elapsed_seconds": round(time.perf_counter() - flow_start, 4),
-                "semantic_cache_hit": True,
-                "semantic_cache_similarity": round(max(cache_similarity, 0.0), 4),
-                "pipeline_timings": pipeline_timings,
-            }
-
-        if LANGGRAPH_WORKFLOW is not None:
-            workflow_start = time.perf_counter()
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
             workflow_state = await LANGGRAPH_WORKFLOW.ainvoke(
                 {
                     "system_prompt": req.system_prompt,
@@ -1215,7 +1169,6 @@ async def generate(req: GenerateRequest):
                     "max_tokens": req.max_tokens,
                 }
             )
-<<<<<<< HEAD
             append_pipeline_timing(pipeline_timings, "workflow_invoke", workflow_started)
 
             raw_text = str(workflow_state.get("raw_text", ""))
@@ -1232,24 +1185,11 @@ async def generate(req: GenerateRequest):
                 append_pipeline_timing(pipeline_timings, "parse_json", parse_started)
         else:
             invoke_started = time.perf_counter()
-=======
-            add_stage_timing(pipeline_timings, "langgraph_workflow", workflow_start)
-
-            raw_text = workflow_state.get("raw_text", "")
-            parsed = workflow_state.get("parsed")
-            provider = workflow_state.get("provider", "local")
-            model_name = workflow_state.get("model", "curalink-local-fallback")
-            provider_errors = workflow_state.get("provider_errors", [])
-        else:
-            prepare_start = time.perf_counter()
-            allowed_citations = extract_allowed_citations(req.user_prompt)
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
             messages = build_prompt_messages(req.system_prompt, req.user_prompt)
             add_stage_timing(pipeline_timings, "prepare_messages", prepare_start)
 
             provider_start = time.perf_counter()
             provider_result = await invoke_provider_chain(req, messages, allowed_citations)
-<<<<<<< HEAD
             append_pipeline_timing(pipeline_timings, "provider_invoke", invoke_started)
 
             raw_text = str(provider_result["raw_text"])
@@ -1264,25 +1204,12 @@ async def generate(req: GenerateRequest):
         if parsed:
             validation_started = time.perf_counter()
             try:
-=======
-            add_stage_timing(pipeline_timings, "provider_generation", provider_start)
-
-            raw_text = provider_result["raw_text"]
-            provider = provider_result["provider"]
-            model_name = provider_result["model"]
-            provider_errors = provider_result.get("provider_errors", [])
-
-            parse_start = time.perf_counter()
-            parsed = extract_json(raw_text)
-            if parsed is not None:
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
                 parsed = ensure_structured_schema(parsed, allowed_citations)
             except ValidationError as exc:
                 validation_error = str(exc)
                 fallback_used = True
                 fallback_reason = validation_error
                 parsed = build_local_fallback_answer(req.user_prompt, allowed_citations)
-<<<<<<< HEAD
                 raw_text = json.dumps(parsed, ensure_ascii=True)
                 provider = "local"
                 model_name = "curalink-local-fallback"
@@ -1320,27 +1247,6 @@ async def generate(req: GenerateRequest):
         append_pipeline_timing(pipeline_timings, "semantic_cache_store", cache_store_started)
 
         elapsed_seconds = time.perf_counter() - started_at
-=======
-            else:
-                parsed = None
-            add_stage_timing(pipeline_timings, "parse_and_validate", parse_start)
-
-        cache_store_start = time.perf_counter()
-        await store_semantic_cache(
-            query_embedding,
-            {
-                "text": raw_text,
-                "parsed": parsed,
-                "model": model_name,
-                "provider": provider,
-            },
-        )
-        add_stage_timing(pipeline_timings, "semantic_cache_store", cache_store_start)
-
-        add_stage_timing(pipeline_timings, "total", flow_start)
-
-        elapsed = round(time.perf_counter() - flow_start, 4)
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
         LAST_GENERATION_PROVIDER = provider
         LAST_GENERATION_AT = time.time()
 
@@ -1350,7 +1256,6 @@ async def generate(req: GenerateRequest):
             logger.warning("Structured fallback used: %s", fallback_reason or "unknown")
         logger.info("LLM generated via %s in %ss, length=%s", provider, round(elapsed_seconds, 3), len(raw_text))
 
-<<<<<<< HEAD
         return build_generate_response(
             text=raw_text,
             parsed=parsed,
@@ -1384,20 +1289,6 @@ async def generate(req: GenerateRequest):
             cache_hit=False,
             cache_similarity=cache_similarity,
         )
-=======
-        return {
-            "text": raw_text,
-            "parsed": parsed,
-            "model": model_name,
-            "provider": provider,
-            "elapsed_seconds": elapsed,
-            "semantic_cache_hit": False,
-            "semantic_cache_similarity": None,
-            "pipeline_timings": pipeline_timings,
-        }
-    except httpx.TimeoutException as exc:
-        raise HTTPException(503, "LLM service timeout. The model may still be loading.") from exc
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     except ValidationError as exc:
         validation_started = time.perf_counter()
         append_pipeline_timing(pipeline_timings, "exception_validation", validation_started)
