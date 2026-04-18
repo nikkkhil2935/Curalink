@@ -1,0 +1,3 @@
+{"level":"error","message":"No MongoDB URI configured. Set MONGODB_URI (and optional fallback/local variables).","timestamp":"2026-04-17T20:53:03.894Z"}
+{"level":"error","message":"No MongoDB URI configured. Set MONGODB_URI (and optional fallback/local variables).","timestamp":"2026-04-17T20:58:10.135Z"}
+{"level":"error","message":"No MongoDB URI configured. Set MONGODB_URI (and optional fallback/local variables).","timestamp":"2026-04-17T21:17:14.728Z"}

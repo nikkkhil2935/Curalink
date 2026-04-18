@@ -1,12 +1,12 @@
 import { cva } from 'class-variance-authority';
 import { cn } from '@/lib/utils.js';
 
-const cardVariants = cva('rounded-2xl border', {
+const cardVariants = cva('rounded-2xl border token-border token-text', {
   variants: {
     tone: {
       panel: 'surface-panel',
       soft: 'surface-soft',
-      elevated: 'surface-soft shadow-[0_14px_40px_rgba(13,22,40,0.35)]'
+      elevated: 'surface-soft shadow-[var(--panel-shadow)]'
     },
     padding: {
       sm: 'p-4',

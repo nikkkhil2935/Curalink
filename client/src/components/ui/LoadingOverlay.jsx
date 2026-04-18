@@ -11,6 +11,7 @@ export default function LoadingOverlay({ message = 'Processing…', steps }) {
   const rendered = Array.isArray(steps) && steps.length > 0 ? steps : STEPS;
 
   return (
+<<<<<<< HEAD
     <div
       className="flex flex-col items-center justify-center p-6 rounded-xl"
       style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}
@@ -37,6 +38,22 @@ export default function LoadingOverlay({ message = 'Processing…', steps }) {
             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
               {step}
             </span>
+=======
+    <div className="rounded-xl border token-border token-surface p-6 shadow-(--panel-shadow)">
+      {message ? <p className="mb-4 text-sm font-medium token-text-muted">{message}</p> : null}
+
+      <div className="space-y-3">
+        <div className="skeleton-block h-4 w-2/3" />
+        <div className="skeleton-block h-4 w-4/5" />
+        <div className="skeleton-block h-4 w-3/5" />
+      </div>
+
+      <div className="mt-5 space-y-2">
+        {renderedSteps.map((step) => (
+          <div key={step} className="flex items-center gap-2">
+            <span className="inline-flex h-2 w-2 rounded-full bg-(--accent)" />
+            <span className="text-xs token-text-subtle">{step}</span>
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
           </div>
         ))}
       </div>

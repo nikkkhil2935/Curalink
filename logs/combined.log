@@ -1,0 +1,32 @@
+{"level":"error","message":"No MongoDB URI configured. Set MONGODB_URI (and optional fallback/local variables).","timestamp":"2026-04-17T20:53:03.894Z"}
+{"level":"info","message":"Server running on port 5050","timestamp":"2026-04-17T20:53:03.983Z"}
+{"level":"info","message":"MongoDB connected (memory)","timestamp":"2026-04-17T20:56:56.904Z"}
+{"level":"info","message":"Starting retrieval for query: \"current treatment options Parkinson disease\"","timestamp":"2026-04-17T20:57:07.382Z"}
+{"level":"info","message":"PubMed searching: \"(Parkinson disease) AND (current OR treatment OR options) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-17T20:57:07.387Z"}
+{"level":"info","message":"OpenAlex searching: \"current treatment options Parkinson disease\"","timestamp":"2026-04-17T20:57:07.420Z"}
+{"level":"info","message":"ClinicalTrials searching: \"Parkinson disease\"","timestamp":"2026-04-17T20:57:07.424Z"}
+{"level":"info","message":"ClinicalTrials fetched 1 studies in 1293ms","timestamp":"2026-04-17T20:57:08.717Z"}
+{"level":"info","message":"OpenAlex fetched 297 works in 8933ms","timestamp":"2026-04-17T20:57:16.353Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 11974ms","timestamp":"2026-04-17T20:57:19.361Z"}
+{"level":"warn","message":"Semantic reranking failed, using keyword scores","timestamp":"2026-04-17T20:57:19.385Z"}
+{"level":"error","message":"No MongoDB URI configured. Set MONGODB_URI (and optional fallback/local variables).","timestamp":"2026-04-17T20:58:10.135Z"}
+{"level":"info","message":"Server running on port 5050","timestamp":"2026-04-17T20:58:10.204Z"}
+{"level":"info","message":"MongoDB connected (memory)","timestamp":"2026-04-17T20:58:10.555Z"}
+{"level":"info","message":"Starting retrieval for query: \"current treatment options Parkinson disease\"","timestamp":"2026-04-17T20:58:33.954Z"}
+{"level":"info","message":"PubMed searching: \"(Parkinson disease) AND (current OR treatment OR options) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-17T20:58:33.954Z"}
+{"level":"info","message":"OpenAlex searching: \"current treatment options Parkinson disease\"","timestamp":"2026-04-17T20:58:33.962Z"}
+{"level":"info","message":"ClinicalTrials searching: \"Parkinson disease\"","timestamp":"2026-04-17T20:58:33.964Z"}
+{"level":"info","message":"ClinicalTrials fetched 1 studies in 1268ms","timestamp":"2026-04-17T20:58:35.232Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 7892ms","timestamp":"2026-04-17T20:58:41.846Z"}
+{"level":"info","message":"OpenAlex fetched 297 works in 9152ms","timestamp":"2026-04-17T20:58:43.114Z"}
+{"level":"warn","message":"Semantic reranking failed, using keyword scores","timestamp":"2026-04-17T20:58:43.133Z"}
+{"level":"error","message":"No MongoDB URI configured. Set MONGODB_URI (and optional fallback/local variables).","timestamp":"2026-04-17T21:17:14.728Z"}
+{"level":"info","message":"Server running on port 5011","timestamp":"2026-04-17T21:17:14.793Z"}
+{"level":"info","message":"MongoDB connected (memory)","timestamp":"2026-04-17T21:17:15.902Z"}
+{"level":"info","message":"Starting retrieval for query: \"latest treatment options asthma\"","timestamp":"2026-04-17T21:17:42.905Z"}
+{"level":"info","message":"PubMed searching: \"(asthma) AND (latest OR treatment OR options) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-17T21:17:42.905Z"}
+{"level":"info","message":"OpenAlex searching: \"latest treatment options asthma\"","timestamp":"2026-04-17T21:17:42.914Z"}
+{"level":"info","message":"ClinicalTrials searching: \"asthma\"","timestamp":"2026-04-17T21:17:42.920Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1238ms","timestamp":"2026-04-17T21:17:44.158Z"}
+{"level":"info","message":"OpenAlex fetched 298 works in 6789ms","timestamp":"2026-04-17T21:17:49.703Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 8689ms","timestamp":"2026-04-17T21:17:51.594Z"}

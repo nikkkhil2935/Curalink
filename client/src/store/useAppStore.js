@@ -6,9 +6,9 @@ export const useAppStore = create((set, get) => ({
   sources: [],
   sourcesByMessageId: {},
   selectedAssistantMessageId: null,
+  highlightedMessageId: null,
   isLoading: false,
   activeTab: 'publications',
-  showContextForm: false,
   error: null,
 
   setSession: (session) => set({ currentSession: session }),
@@ -69,9 +69,24 @@ export const useAppStore = create((set, get) => ({
         sources: normalizedMessageId ? state.sourcesByMessageId[normalizedMessageId] || [] : []
       };
     }),
+  updateMessage: (messageId, updates) =>
+    set((state) => ({
+      messages: state.messages.map((message) => {
+        const candidateId = String(message?._id || message?.id || '');
+        if (!candidateId || candidateId !== String(messageId)) {
+          return message;
+        }
+
+        return {
+          ...message,
+          ...updates
+        };
+      })
+    })),
+  setHighlightedMessage: (messageId) =>
+    set({ highlightedMessageId: messageId ? String(messageId) : null }),
   setLoading: (val) => set({ isLoading: val }),
   setActiveTab: (activeTab) => set({ activeTab }),
-  setShowContextForm: (showContextForm) => set({ showContextForm }),
   reset: () =>
     set({
       currentSession: null,
@@ -79,9 +94,9 @@ export const useAppStore = create((set, get) => ({
       sources: [],
       sourcesByMessageId: {},
       selectedAssistantMessageId: null,
+      highlightedMessageId: null,
       isLoading: false,
       activeTab: 'publications',
-      showContextForm: false,
       error: null
     })
 }));

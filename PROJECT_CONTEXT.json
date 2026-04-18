@@ -1,5 +1,9 @@
 {
+<<<<<<< HEAD
   "generatedAt": "2026-04-17T11:18:50.082Z",
+=======
+  "generatedAt": "2026-04-18T11:09:11.978Z",
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
   "workspaceName": "Curalink",
   "services": [
     {
@@ -36,37 +40,17 @@
         {
           "key": "MONGODB_URI",
           "value": "mongodb+srv://username:password@cluster0.example.mongodb.net/curalink?retryWrites=true&w=majority",
-          "note": "URL-encode special characters in the password (example: @ => %40). If Atlas SRV DNS lookups fail on Windows, switch to a non-SRV URI with explicit hosts."
-        },
-        {
-          "key": "MONGODB_URI_FALLBACK",
-          "value": "mongodb://username:password@cluster0-shard-00-00.example.mongodb.net:27017,cluster0-shard-00-01.example.mongodb.net:27017,cluster0-shard-00-02.example.mongodb.net:27017/curalink?ssl=true&replicaSet=atlas-xxxxx-shard-0&authSource=admin&retryWrites=true&w=majority",
-          "note": "Optional non-SRV fallback URI (recommended for Windows DNS/SRV issues)."
-        },
-        {
-          "key": "MONGODB_URI_LOCAL",
-          "value": "mongodb://127.0.0.1:27017/curalink?directConnection=true",
-          "note": "Optional local Mongo fallback URI."
-        },
-        {
-          "key": "MONGODB_ALLOW_LOCAL_FALLBACK",
-          "value": "false",
-          "note": "Allow using local Mongo URI fallback in production only when explicitly enabled."
-        },
-        {
-          "key": "MONGODB_MEMORY_FALLBACK",
-          "value": "false",
-          "note": "Enable in-memory Mongo fallback when no external MongoDB is reachable."
+          "note": "Required: MongoDB Atlas SRV URI only."
         },
         {
           "key": "LLM_SERVICE_URL",
           "value": "http://127.0.0.1:8001",
-          "note": ""
+          "note": "Service endpoints"
         },
         {
           "key": "FRONTEND_URL",
           "value": "http://localhost:5173",
-          "note": "Comma-separated allowed origins for browser access."
+          "note": ""
         },
         {
           "key": "PORT",
@@ -74,18 +58,83 @@
           "note": ""
         },
         {
-          "key": "TRUST_PROXY",
-          "value": "0",
-          "note": "Set explicitly per deployment topology (for example 1 behind reverse proxy)."
-        },
-        {
           "key": "NODE_ENV",
           "value": "development",
+          "note": "Runtime"
+        },
+        {
+          "key": "APP_VERSION",
+          "value": "1.0.0",
+          "note": ""
+        },
+        {
+          "key": "TRUST_PROXY",
+          "value": "0",
           "note": ""
         },
         {
           "key": "PUBMED_EMAIL",
           "value": "you@example.com",
+          "note": ""
+        },
+        {
+          "key": "MONGODB_SERVER_SELECTION_TIMEOUT_MS",
+          "value": "5000",
+          "note": "MongoDB connection tuning"
+        },
+        {
+          "key": "MONGODB_CONNECT_TIMEOUT_MS",
+          "value": "10000",
+          "note": ""
+        },
+        {
+          "key": "MONGODB_SOCKET_TIMEOUT_MS",
+          "value": "30000",
+          "note": ""
+        },
+        {
+          "key": "MONGODB_MAX_POOL_SIZE",
+          "value": "20",
+          "note": ""
+        },
+        {
+          "key": "MONGODB_MIN_POOL_SIZE",
+          "value": "0",
+          "note": ""
+        },
+        {
+          "key": "MONGODB_MAX_IDLE_MS",
+          "value": "30000",
+          "note": ""
+        },
+        {
+          "key": "QUERY_CACHE_TTL_MS",
+          "value": "300000",
+          "note": "Server caches and LLM HTTP keep-alive"
+        },
+        {
+          "key": "QUERY_CACHE_MAX_ENTRIES",
+          "value": "500",
+          "note": ""
+        },
+        {
+          "key": "LLM_KEEP_ALIVE_MS",
+          "value": "30000",
+          "note": ""
+        },
+        {
+          "key": "LLM_MAX_SOCKETS",
+          "value": "50",
+          "note": ""
+        },
+        {
+          "key": "ANALYTICS_SCHEDULER_ENABLED",
+          "value": "true",
+          "note": "Scheduler"
+        },
+        {
+          "key": "ANALYTICS_SNAPSHOT_CRON",
+          "value": "0 * * * *",
           "note": ""
         }
       ]
@@ -100,6 +149,11 @@
         },
         {
           "key": "VITE_API_URL",
+          "value": "http://127.0.0.1:5000/api",
+          "note": ""
+        },
+        {
+          "key": "VITE_API_URL",
           "value": "https://your-backend.railway.app/api",
           "note": ""
         }
@@ -108,6 +162,21 @@
     {
       "name": "Discovered In Code (process.env/os.getenv)",
       "entries": [
+        {
+          "key": "ANALYTICS_SCHEDULER_ENABLED",
+          "value": "<set-as-needed>",
+          "note": ""
+        },
+        {
+          "key": "ANALYTICS_SNAPSHOT_CRON",
+          "value": "<set-as-needed>",
+          "note": ""
+        },
+        {
+          "key": "APP_VERSION",
+          "value": "<set-as-needed>",
+          "note": ""
+        },
         {
           "key": "FALLBACK_EMBED_DIM",
           "value": "<set-as-needed>",
@@ -125,6 +194,16 @@
         },
         {
           "key": "GROQ_MODEL",
+          "value": "<set-as-needed>",
+          "note": ""
+        },
+        {
+          "key": "LLM_KEEP_ALIVE_MS",
+          "value": "<set-as-needed>",
+          "note": ""
+        },
+        {
+          "key": "LLM_MAX_SOCKETS",
           "value": "<set-as-needed>",
           "note": ""
         },
@@ -165,11 +244,6 @@
         },
         {
           "key": "MONGODB_MIN_POOL_SIZE",
-          "value": "<set-as-needed>",
-          "note": ""
-        },
-        {
-          "key": "MONGODB_RETRY_MS",
           "value": "<set-as-needed>",
           "note": ""
         },
@@ -229,7 +303,32 @@
           "note": ""
         },
         {
+          "key": "PRIMARY_LLM_PROVIDER",
+          "value": "<set-as-needed>",
+          "note": ""
+        },
+        {
           "key": "PUBMED_EMAIL",
+          "value": "<set-as-needed>",
+          "note": ""
+        },
+        {
+          "key": "QUERY_CACHE_MAX_ENTRIES",
+          "value": "<set-as-needed>",
+          "note": ""
+        },
+        {
+          "key": "QUERY_CACHE_TTL_MS",
+          "value": "<set-as-needed>",
+          "note": ""
+        },
+        {
+          "key": "SEMANTIC_CACHE_MAX_SIZE",
+          "value": "<set-as-needed>",
+          "note": ""
+        },
+        {
+          "key": "SEMANTIC_CACHE_THRESHOLD",
           "value": "<set-as-needed>",
           "note": ""
         },
@@ -279,6 +378,11 @@
     },
     {
       "method": "GET",
+      "path": "/api/analytics/sessions/:id/breakdown",
+      "file": "server/src/routes/analytics.js"
+    },
+    {
+      "method": "GET",
       "path": "/api/analytics/snapshots",
       "file": "server/src/routes/analytics.js"
     },
@@ -299,6 +403,11 @@
     },
     {
       "method": "GET",
+      "path": "/api/export/:id/export",
+      "file": "server/src/routes/export.js"
+    },
+    {
+      "method": "GET",
       "path": "/api/health",
       "file": "server/src/app.js"
     },
@@ -314,6 +423,11 @@
     },
     {
       "method": "GET",
+      "path": "/api/sessions/:id/insights",
+      "file": "server/src/routes/sessions.js"
+    },
+    {
+      "method": "GET",
       "path": "/api/sessions/:id/sources",
       "file": "server/src/routes/sessions.js"
     },
@@ -323,13 +437,28 @@
       "file": "server/src/routes/sessions.js"
     },
     {
-      "method": "POST",
-      "path": "/api/export/:sessionId",
-      "file": "server/src/routes/export.js"
+      "method": "GET",
+      "path": "/api/sessions/history/search",
+      "file": "server/src/routes/sessions.js"
+    },
+    {
+      "method": "GET",
+      "path": "/api/suggestions",
+      "file": "server/src/routes/query.js"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "file": "server/src/app.js"
     },
     {
       "method": "POST",
       "path": "/api/sessions",
+      "file": "server/src/routes/sessions.js"
+    },
+    {
+      "method": "POST",
+      "path": "/api/sessions/:id/messages/:msgId/bookmark",
       "file": "server/src/routes/sessions.js"
     },
     {
@@ -339,6 +468,11 @@
     }
   ],
   "llmRoutes": [
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "file": "llm-service/main.py"
+    },
     {
       "method": "GET",
       "path": "/health",
@@ -358,6 +492,11 @@
       "method": "POST",
       "path": "/rerank",
       "file": "llm-service/main.py"
+    },
+    {
+      "method": "POST",
+      "path": "/suggestions",
+      "file": "llm-service/main.py"
     }
   ],
   "frontendRoutes": [
@@ -376,20 +515,13 @@
     {
       "path": "/analytics",
       "file": "client/src/App.jsx"
-    },
-    {
-      "path": "/platform",
-      "file": "client/src/App.jsx"
-    },
-    {
-      "path": "/status",
-      "file": "client/src/App.jsx"
     }
   ],
   "dependencies": {
     "root": [
       "@fontsource/inter",
-      "@fontsource/jetbrains-mono"
+      "@fontsource/jetbrains-mono",
+      "concurrently"
     ],
     "client": [
       "@radix-ui/react-dialog",
@@ -397,6 +529,7 @@
       "axios",
       "class-variance-authority",
       "clsx",
+      "curalink-workspace",
       "framer-motion",
       "jspdf",
       "lucide-react",
@@ -409,12 +542,13 @@
     ],
     "server": [
       "axios",
+      "compression",
       "cors",
+      "curalink-workspace",
       "dotenv",
       "express",
       "express-rate-limit",
       "helmet",
-      "mongodb-memory-server",
       "mongoose",
       "morgan",
       "node-cron",
@@ -449,6 +583,11 @@
     "    - .github/agents/prd-llm-rag.agent.md",
     "    - .github/agents/prd-sync-orchestrator.agent.md",
     "    - .github/agents/prd-validation-sync.agent.md",
+    "- .mypy_cache/",
+    "  - .mypy_cache/3.12/",
+    "    - .mypy_cache/3.12/cache.db",
+    "  - .mypy_cache/.gitignore",
+    "  - .mypy_cache/CACHEDIR.TAG",
     "- .superdesign/",
     "  - .superdesign/init/",
     "    - .superdesign/init/components.md",
@@ -458,6 +597,7 @@
     "    - .superdesign/init/routes.md",
     "    - .superdesign/init/theme.md",
     "  - .superdesign/design-system.md",
+    "  - .superdesign/SUPERDESIGN.md",
     "- client/",
     "  - client/public/",
     "    - client/public/favicon.ico",
@@ -477,16 +617,27 @@
     "  - client/index.html",
     "  - client/package-lock.json",
     "  - client/package.json",
+    "  - client/tailwind.config.js",
     "  - client/vite.config.js",
+    "- graphify-out/",
+    "  - graphify-out/latency-bench-2026-04-18T08-00-41-354Z.json",
     "- llm-service/",
+    "  - llm-service/cache/",
     "  - llm-service/Dockerfile",
     "  - llm-service/main.py",
     "  - llm-service/requirements.txt",
     "  - llm-service/start.sh",
+    "- logs/",
+    "  - logs/combined.log",
+    "  - logs/error.log",
     "- scripts/",
     "  - scripts/generate-project-context.mjs",
     "  - scripts/integration-smoke.mjs",
+    "  - scripts/latency-bench.mjs",
     "- server/",
+    "  - server/logs/",
+    "    - server/logs/combined.log",
+    "    - server/logs/error.log",
     "  - server/src/",
     "    - server/src/lib/",
     "    - server/src/middleware/",
@@ -500,10 +651,12 @@
     "  - server/package.json",
     "- .env.example",
     "- .gitignore",
+    "- components.json",
     "- DAY1_IMPLEMENTATION.md",
     "- DAY2_IMPLEMENTATION.md",
     "- DAY3_IMPLEMENTATION.md",
     "- DAY4_IMPLEMENTATION.md",
+    "- integration-smoke.mjs",
     "- main.py",
     "- package-lock.json",
     "- package.json",
@@ -511,6 +664,10 @@
     "- PROJECT_CONTEXT.json",
     "- PROJECT_CONTEXT.md",
     "- README.md",
+<<<<<<< HEAD
     "- TODO.md"
+=======
+    "- start.js"
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
   ]
 }

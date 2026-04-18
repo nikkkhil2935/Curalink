@@ -63,10 +63,11 @@ export function buildSystemPrompt() {
 STRICT RULES:
 1. ONLY use information from the SOURCES section below. Do NOT use your training knowledge.
 2. Every research_insight and clinical_trial entry MUST include source_ids (e.g., ["P1", "P2"]).
-3. If a claim cannot be supported by the provided sources, say: "Evidence not available in current research pool."
-4. NEVER give direct medical advice or dosage recommendations. Always suggest consulting a healthcare provider.
-5. Be empathetic, clear, and avoid excessive medical jargon.
-6. Output MUST be valid JSON only. No text before or after the JSON.
+3. Include confidence_breakdown entries for cited sources with normalized scores between 0 and 1.
+4. If a claim cannot be supported by the provided sources, say: "Evidence not available in current research pool."
+5. NEVER give direct medical advice or dosage recommendations. Always suggest consulting a healthcare provider.
+6. Be empathetic, clear, and avoid excessive medical jargon.
+7. Output MUST be valid JSON only. No text before or after the JSON.
 
 OUTPUT FORMAT (respond ONLY with this JSON structure):
 {
@@ -94,6 +95,16 @@ OUTPUT FORMAT (respond ONLY with this JSON structure):
   "recommendations": "Empathetic, non-prescriptive summary of what the patient should consider. Always end with: Please consult your healthcare provider.",
   "follow_up_suggestions": [
     "Specific question the patient might ask next (3 items)"
+  ],
+  "confidence_breakdown": [
+    {
+      "source_id": "P1|T1",
+      "title": "Short source title",
+      "relevance_score": 0.0,
+      "credibility_score": 0.0,
+      "recency_score": 0.0,
+      "composite_score": 0.0
+    }
   ]
 }`;
 }

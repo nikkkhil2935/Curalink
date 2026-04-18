@@ -1,6 +1,10 @@
 # PROJECT CONTEXT
 
+<<<<<<< HEAD
 Last Updated: 2026-04-17T11:18:50.082Z
+=======
+Last Updated: 2026-04-18T11:09:11.978Z
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 Workspace: Curalink
 
 ## What This Is
@@ -32,48 +36,64 @@ Workspace: Curalink
 
 ## Environment Variables
 ### Backend (.env.example)
-- MONGODB_URI=mongodb+srv://username:password@cluster0.example.mongodb.net/curalink?retryWrites=true&w=majority (URL-encode special characters in the password (example: @ => %40). If Atlas SRV DNS lookups fail on Windows, switch to a non-SRV URI with explicit hosts.)
-- MONGODB_URI_FALLBACK=mongodb://username:password@cluster0-shard-00-00.example.mongodb.net:27017,cluster0-shard-00-01.example.mongodb.net:27017,cluster0-shard-00-02.example.mongodb.net:27017/curalink?ssl=true&replicaSet=atlas-xxxxx-shard-0&authSource=admin&retryWrites=true&w=majority (Optional non-SRV fallback URI (recommended for Windows DNS/SRV issues).)
-- MONGODB_URI_LOCAL=mongodb://127.0.0.1:27017/curalink?directConnection=true (Optional local Mongo fallback URI.)
-- MONGODB_ALLOW_LOCAL_FALLBACK=false (Allow using local Mongo URI fallback in production only when explicitly enabled.)
-- MONGODB_MEMORY_FALLBACK=false (Enable in-memory Mongo fallback when no external MongoDB is reachable.)
-- LLM_SERVICE_URL=http://127.0.0.1:8001
-- FRONTEND_URL=http://localhost:5173 (Comma-separated allowed origins for browser access.)
+- MONGODB_URI=mongodb+srv://username:password@cluster0.example.mongodb.net/curalink?retryWrites=true&w=majority (Required: MongoDB Atlas SRV URI only.)
+- LLM_SERVICE_URL=http://127.0.0.1:8001 (Service endpoints)
+- FRONTEND_URL=http://localhost:5173
 - PORT=5000
-- TRUST_PROXY=0 (Set explicitly per deployment topology (for example 1 behind reverse proxy).)
-- NODE_ENV=development
+- NODE_ENV=development (Runtime)
+- APP_VERSION=1.0.0
+- TRUST_PROXY=0
 - PUBMED_EMAIL=you@example.com
+- MONGODB_SERVER_SELECTION_TIMEOUT_MS=5000 (MongoDB connection tuning)
+- MONGODB_CONNECT_TIMEOUT_MS=10000
+- MONGODB_SOCKET_TIMEOUT_MS=30000
+- MONGODB_MAX_POOL_SIZE=20
+- MONGODB_MIN_POOL_SIZE=0
+- MONGODB_MAX_IDLE_MS=30000
+- QUERY_CACHE_TTL_MS=300000 (Server caches and LLM HTTP keep-alive)
+- QUERY_CACHE_MAX_ENTRIES=500
+- LLM_KEEP_ALIVE_MS=30000
+- LLM_MAX_SOCKETS=50
+- ANALYTICS_SCHEDULER_ENABLED=true (Scheduler)
+- ANALYTICS_SNAPSHOT_CRON=0 * * * *
 
 ### Frontend (.env.example + .env.production)
 - VITE_APP_NAME=Curalink
+- VITE_API_URL=http://127.0.0.1:5000/api
 - VITE_API_URL=https://your-backend.railway.app/api
 
 ### Discovered In Code (process.env/os.getenv)
+- ANALYTICS_SCHEDULER_ENABLED=<set-as-needed>
+- ANALYTICS_SNAPSHOT_CRON=<set-as-needed>
+- APP_VERSION=<set-as-needed>
 - FALLBACK_EMBED_DIM=<set-as-needed>
 - FRONTEND_URL=<set-as-needed>
 - GROQ_API_KEY=<set-as-needed>
 - GROQ_MODEL=<set-as-needed>
+- LLM_KEEP_ALIVE_MS=<set-as-needed>
+- LLM_MAX_SOCKETS=<set-as-needed>
 - LLM_SERVICE_URL=<set-as-needed>
 - LOCAL_FALLBACK_ENABLED=<set-as-needed>
-- MONGODB_ALLOW_LOCAL_FALLBACK=<set-as-needed>
 - MONGODB_CONNECT_TIMEOUT_MS=<set-as-needed>
 - MONGODB_MAX_IDLE_MS=<set-as-needed>
 - MONGODB_MAX_POOL_SIZE=<set-as-needed>
-- MONGODB_MEMORY_FALLBACK=<set-as-needed>
 - MONGODB_MIN_POOL_SIZE=<set-as-needed>
-- MONGODB_RETRY_MS=<set-as-needed>
 - MONGODB_SERVER_SELECTION_TIMEOUT_MS=<set-as-needed>
 - MONGODB_SOCKET_TIMEOUT_MS=<set-as-needed>
 - MONGODB_URI=<set-as-needed>
 - MONGODB_URI_FALLBACK=<set-as-needed>
-- MONGODB_URI_LOCAL=<set-as-needed>
 - NODE_ENV=<set-as-needed>
 - OLLAMA_EMBED_MODEL=<set-as-needed>
 - OLLAMA_EMBED_TIMEOUT_SEC=<set-as-needed>
 - OLLAMA_MODEL=<set-as-needed>
 - OLLAMA_URL=<set-as-needed>
 - PORT=<set-as-needed>
+- PRIMARY_LLM_PROVIDER=<set-as-needed>
 - PUBMED_EMAIL=<set-as-needed>
+- QUERY_CACHE_MAX_ENTRIES=<set-as-needed>
+- QUERY_CACHE_TTL_MS=<set-as-needed>
+- SEMANTIC_CACHE_MAX_SIZE=<set-as-needed>
+- SEMANTIC_CACHE_THRESHOLD=<set-as-needed>
 - TRUST_PROXY=<set-as-needed>
 - USE_LANGGRAPH_WORKFLOW=<set-as-needed>
 - VITE_API_URL=<set-as-needed>
@@ -84,37 +104,43 @@ Workspace: Curalink
 - DELETE /api/sessions/:id (server/src/routes/sessions.js)
 - GET /api/analytics/intent-breakdown (server/src/routes/analytics.js)
 - GET /api/analytics/overview (server/src/routes/analytics.js)
+- GET /api/analytics/sessions/:id/breakdown (server/src/routes/analytics.js)
 - GET /api/analytics/snapshots (server/src/routes/analytics.js)
 - GET /api/analytics/source-stats (server/src/routes/analytics.js)
 - GET /api/analytics/top-diseases (server/src/routes/analytics.js)
 - GET /api/analytics/trial-status (server/src/routes/analytics.js)
+- GET /api/sessions/:id/export (server/src/routes/export.js)
 - GET /api/health (server/src/app.js)
 - GET /api/sessions (server/src/routes/sessions.js)
 - GET /api/sessions/:id (server/src/routes/sessions.js)
+- GET /api/sessions/:id/insights (server/src/routes/sessions.js)
 - GET /api/sessions/:id/sources (server/src/routes/sessions.js)
 - GET /api/sessions/:id/sources/:messageId (server/src/routes/sessions.js)
-- POST /api/export/:sessionId (server/src/routes/export.js)
+- GET /api/sessions/history/search (server/src/routes/sessions.js)
+- GET /api/suggestions (server/src/routes/query.js)
+- GET /health (server/src/app.js)
 - POST /api/sessions (server/src/routes/sessions.js)
+- POST /api/sessions/:id/messages/:msgId/bookmark (server/src/routes/sessions.js)
 - POST /api/sessions/:id/query (server/src/routes/query.js)
 
 ## LLM API Endpoints
+- GET /api/health (llm-service/main.py)
 - GET /health (llm-service/main.py)
 - POST /embed (llm-service/main.py)
 - POST /generate (llm-service/main.py)
 - POST /rerank (llm-service/main.py)
+- POST /suggestions (llm-service/main.py)
 
 ## Frontend Routes
 - / (client/src/App.jsx)
 - /app (client/src/App.jsx)
 - /research/:sessionId (client/src/App.jsx)
 - /analytics (client/src/App.jsx)
-- /platform (client/src/App.jsx)
-- /status (client/src/App.jsx)
 
 ## Dependencies Snapshot
-- Root dependencies: 2
-- Client dependencies: 14
-- Server dependencies: 12
+- Root dependencies: 3
+- Client dependencies: 15
+- Server dependencies: 13
 - LLM python requirements: 10
 
 ## Quick Checks
@@ -132,6 +158,11 @@ Workspace: Curalink
     - .github/agents/prd-llm-rag.agent.md
     - .github/agents/prd-sync-orchestrator.agent.md
     - .github/agents/prd-validation-sync.agent.md
+- .mypy_cache/
+  - .mypy_cache/3.12/
+    - .mypy_cache/3.12/cache.db
+  - .mypy_cache/.gitignore
+  - .mypy_cache/CACHEDIR.TAG
 - .superdesign/
   - .superdesign/init/
     - .superdesign/init/components.md
@@ -141,6 +172,7 @@ Workspace: Curalink
     - .superdesign/init/routes.md
     - .superdesign/init/theme.md
   - .superdesign/design-system.md
+  - .superdesign/SUPERDESIGN.md
 - client/
   - client/public/
     - client/public/favicon.ico
@@ -160,16 +192,27 @@ Workspace: Curalink
   - client/index.html
   - client/package-lock.json
   - client/package.json
+  - client/tailwind.config.js
   - client/vite.config.js
+- graphify-out/
+  - graphify-out/latency-bench-2026-04-18T08-00-41-354Z.json
 - llm-service/
+  - llm-service/cache/
   - llm-service/Dockerfile
   - llm-service/main.py
   - llm-service/requirements.txt
   - llm-service/start.sh
+- logs/
+  - logs/combined.log
+  - logs/error.log
 - scripts/
   - scripts/generate-project-context.mjs
   - scripts/integration-smoke.mjs
+  - scripts/latency-bench.mjs
 - server/
+  - server/logs/
+    - server/logs/combined.log
+    - server/logs/error.log
   - server/src/
     - server/src/lib/
     - server/src/middleware/
@@ -183,10 +226,12 @@ Workspace: Curalink
   - server/package.json
 - .env.example
 - .gitignore
+- components.json
 - DAY1_IMPLEMENTATION.md
 - DAY2_IMPLEMENTATION.md
 - DAY3_IMPLEMENTATION.md
 - DAY4_IMPLEMENTATION.md
+- integration-smoke.mjs
 - main.py
 - package-lock.json
 - package.json
@@ -194,5 +239,9 @@ Workspace: Curalink
 - PROJECT_CONTEXT.json
 - PROJECT_CONTEXT.md
 - README.md
+<<<<<<< HEAD
 - TODO.md
+=======
+- start.js
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 

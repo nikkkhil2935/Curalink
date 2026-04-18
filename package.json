@@ -2,6 +2,8 @@
   "name": "curalink-workspace",
   "private": true,
   "scripts": {
+    "start": "npm run start:all",
+    "start:all": "node start.js",
     "context:refresh": "node scripts/generate-project-context.mjs",
     "check:server": "npm --prefix server run check",
     "check:client": "npm --prefix client run check",
@@ -11,6 +13,7 @@
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
-    "@fontsource/jetbrains-mono": "^5.2.8"
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "concurrently": "^9.2.1"
   }
 }

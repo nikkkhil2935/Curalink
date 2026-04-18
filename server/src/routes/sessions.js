@@ -4,6 +4,7 @@ import Session from '../models/Session.js';
 import Message from '../models/Message.js';
 import SourceDoc from '../models/SourceDoc.js';
 import Analytics from '../models/Analytics.js';
+<<<<<<< HEAD
 import { buildSessionInsights } from '../services/sessionInsights.js';
 import { gzipCompression } from '../middleware/gzipCompression.js';
 import {
@@ -15,6 +16,18 @@ import logger from '../lib/logger.js';
 
 const router = express.Router();
 router.use(gzipCompression());
+=======
+import { buildInsightsPayload } from '../services/sessionInsights.js';
+import {
+  insightsResponseCache,
+  invalidateInsightsCache,
+  setInsightsCache
+} from '../middleware/insightsCache.js';
+import { invalidateSessionQueryCache } from '../services/queryResultCache.js';
+
+const router = express.Router();
+export const bookmarksRouter = express.Router();
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 const ALLOWED_SEX_VALUES = new Set(['Male', 'Female', 'Other']);
 
 function normalizeText(value) {
@@ -63,6 +76,67 @@ function hasValidSessionId(id) {
   return mongoose.Types.ObjectId.isValid(id);
 }
 
+function escapeRegExp(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function truncateText(value, maxLength = 180) {
+  const normalized = normalizeText(value);
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function buildLikeRegex(rawQuery) {
+  const terms = normalizeText(rawQuery)
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 8);
+
+  if (!terms.length) {
+    return null;
+  }
+
+  const pattern = `${terms.map((term) => `(?=.*${escapeRegExp(term)})`).join('')}.*`;
+  return new RegExp(pattern, 'i');
+}
+
+function buildMessageSnippet(message) {
+  if (message?.role === 'assistant') {
+    const overview = normalizeText(message?.structuredAnswer?.condition_overview || '');
+    if (overview) {
+      return truncateText(overview, 220);
+    }
+  }
+
+  return truncateText(message?.text || '', 220);
+}
+
+function buildConfidenceByCitationMap(confidenceBreakdown = []) {
+  const map = new Map();
+
+  (Array.isArray(confidenceBreakdown) ? confidenceBreakdown : []).forEach((entry) => {
+    const citationId = normalizeText(entry?.source_id).toUpperCase();
+    if (!citationId || map.has(citationId)) {
+      return;
+    }
+
+    map.set(citationId, {
+      source_id: citationId,
+      title: normalizeText(entry?.title),
+      relevance_score: Number(entry?.relevance_score || 0),
+      credibility_score: Number(entry?.credibility_score || 0),
+      recency_score: Number(entry?.recency_score || 0),
+      composite_score: Number(entry?.composite_score || 0)
+    });
+  });
+
+  return map;
+}
+
 function orderSourceIds(sourceIndex = {}, usedSourceIds = []) {
   const orderedIds = [];
   const seenIds = new Set();
@@ -109,13 +183,14 @@ function orderSourceIds(sourceIndex = {}, usedSourceIds = []) {
   return orderedIds;
 }
 
-function attachCitations(orderedIds, sourceDocs, sourceIndex = {}) {
+function attachCitations(orderedIds, sourceDocs, sourceIndex = {}, confidenceBreakdown = []) {
   const sourceById = new Map(sourceDocs.map((doc) => [String(doc._id), doc]));
   const idToCitation = new Map(
     Object.entries(sourceIndex)
       .filter(([, sourceId]) => sourceId)
       .map(([citationId, sourceId]) => [String(sourceId), String(citationId)])
   );
+  const confidenceByCitation = buildConfidenceByCitationMap(confidenceBreakdown);
 
   return orderedIds
     .map((sourceId) => {
@@ -123,10 +198,24 @@ function attachCitations(orderedIds, sourceDocs, sourceIndex = {}) {
       if (!doc) {
         return null;
       }
+
+      const citationId = idToCitation.get(String(sourceId)) || null;
+      const fallbackConfidence = {
+        source_id: citationId || String(doc._id),
+        title: doc.title || citationId || String(doc._id),
+        relevance_score: Number(doc.relevanceScore ?? doc.lastRelevanceScore ?? doc.finalScore ?? 0),
+        credibility_score: Number(doc.sourceCredibility ?? 0),
+        recency_score: Number(doc.recencyScore ?? 0),
+        composite_score: Number(doc.finalScore ?? doc.lastRelevanceScore ?? 0)
+      };
+
       return {
         ...doc,
         id: String(doc._id),
-        citationId: idToCitation.get(String(sourceId)) || null
+        citationId,
+        confidence_breakdown: citationId
+          ? confidenceByCitation.get(String(citationId).toUpperCase()) || fallbackConfidence
+          : fallbackConfidence
       };
     })
     .filter(Boolean);
@@ -170,6 +259,107 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+router.get('/history/search', async (req, res, next) => {
+  try {
+    const query = normalizeText(req.query.q);
+    const requestedLimit = Number.parseInt(String(req.query.limit || '20'), 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(50, requestedLimit))
+      : 20;
+
+    if (!query) {
+      return res.json({ query: '', limit, results: [] });
+    }
+
+    const likeRegex = buildLikeRegex(query);
+    if (!likeRegex) {
+      return res.json({ query, limit, results: [] });
+    }
+
+    const rawMatches = await Message.aggregate([
+      {
+        $match: {
+          $or: [
+            { text: likeRegex },
+            { 'structuredAnswer.condition_overview': likeRegex },
+            { 'structuredAnswer.recommendations': likeRegex },
+            { 'structuredAnswer.research_insights.insight': likeRegex },
+            { 'structuredAnswer.clinical_trials.summary': likeRegex }
+          ]
+        }
+      },
+      {
+        $lookup: {
+          from: 'sessions',
+          localField: 'sessionId',
+          foreignField: '_id',
+          as: 'session'
+        }
+      },
+      { $unwind: '$session' },
+      { $sort: { createdAt: -1 } },
+      { $limit: limit },
+      {
+        $project: {
+          _id: 1,
+          sessionId: 1,
+          role: 1,
+          text: 1,
+          structuredAnswer: 1,
+          createdAt: 1,
+          sessionTitle: '$session.title',
+          disease: '$session.disease'
+        }
+      }
+    ]);
+
+    const results = rawMatches.map((entry) => ({
+      sessionId: String(entry.sessionId),
+      sessionTitle: entry.sessionTitle || '',
+      disease: entry.disease || '',
+      messageId: String(entry._id),
+      role: entry.role,
+      text: buildMessageSnippet(entry),
+      createdAt: entry.createdAt
+    }));
+
+    return res.json({ query, limit, results });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/:id/messages/:msgId/bookmark', async (req, res, next) => {
+  try {
+    if (!hasValidSessionId(req.params.id) || !hasValidSessionId(req.params.msgId)) {
+      return res.status(400).json({ error: 'Invalid session or message id' });
+    }
+
+    const message = await Message.findOne({
+      _id: req.params.msgId,
+      sessionId: req.params.id,
+      role: 'assistant'
+    });
+
+    if (!message) {
+      return res.status(404).json({ error: 'Assistant message not found' });
+    }
+
+    message.isBookmarked = !Boolean(message.isBookmarked);
+    message.bookmarkedAt = message.isBookmarked ? new Date() : null;
+    await message.save();
+
+    return res.json({
+      messageId: String(message._id),
+      sessionId: String(message.sessionId),
+      isBookmarked: message.isBookmarked,
+      bookmarkedAt: message.bookmarkedAt
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.get('/:id', async (req, res, next) => {
   try {
     if (!hasValidSessionId(req.params.id)) {
@@ -190,6 +380,42 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
+router.get('/:id/insights', insightsResponseCache, async (req, res, next) => {
+  try {
+    if (!hasValidSessionId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
+
+    const session = await Session.findById(req.params.id).select('_id').lean();
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const latestAssistant = await Message.findOne(
+      {
+        sessionId: req.params.id,
+        role: 'assistant',
+        structuredAnswer: { $ne: null }
+      },
+      {
+        structuredAnswer: 1,
+        trace: 1,
+        retrievalStats: 1,
+        createdAt: 1
+      }
+    )
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const payload = buildInsightsPayload(req.params.id, latestAssistant);
+
+    setInsightsCache(req.params.id, payload);
+    return res.json(payload);
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.get('/:id/sources', async (req, res, next) => {
   try {
     if (!hasValidSessionId(req.params.id)) {
@@ -205,7 +431,7 @@ router.get('/:id/sources', async (req, res, next) => {
           role: 'assistant',
           usedSourceIds: { $exists: true, $ne: [] }
         },
-        { usedSourceIds: 1, sourceIndex: 1 }
+        { usedSourceIds: 1, sourceIndex: 1, 'structuredAnswer.confidence_breakdown': 1 }
       )
         .sort({ createdAt: -1 })
         .lean();
@@ -222,7 +448,12 @@ router.get('/:id/sources', async (req, res, next) => {
       }
 
       const sourceDocs = await SourceDoc.find({ _id: { $in: orderedIds } }).lean();
-      const sources = attachCitations(orderedIds, sourceDocs, sourceIndex);
+      const sources = attachCitations(
+        orderedIds,
+        sourceDocs,
+        sourceIndex,
+        latestMessage.structuredAnswer?.confidence_breakdown || []
+      );
 
       return res.json({ sources });
     }
@@ -258,7 +489,7 @@ router.get('/:id/sources/:messageId', async (req, res, next) => {
         sessionId: req.params.id,
         role: 'assistant'
       },
-      { usedSourceIds: 1, sourceIndex: 1 }
+      { usedSourceIds: 1, sourceIndex: 1, 'structuredAnswer.confidence_breakdown': 1 }
     ).lean();
 
     if (!message) {
@@ -273,7 +504,12 @@ router.get('/:id/sources/:messageId', async (req, res, next) => {
     }
 
     const sourceDocs = await SourceDoc.find({ _id: { $in: orderedIds } }).lean();
-    const sources = attachCitations(orderedIds, sourceDocs, sourceIndex);
+    const sources = attachCitations(
+      orderedIds,
+      sourceDocs,
+      sourceIndex,
+      message.structuredAnswer?.confidence_breakdown || []
+    );
 
     return res.json({ messageId: req.params.messageId, sources });
   } catch (err) {
@@ -334,9 +570,111 @@ router.delete('/:id', async (req, res, next) => {
       Analytics.deleteMany({ sessionId: req.params.id })
     ]);
 
+<<<<<<< HEAD
     invalidateSessionInsightsCache(req.params.id);
+=======
+    invalidateInsightsCache(req.params.id);
+    invalidateSessionQueryCache(req.params.id);
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
     return res.json({ message: 'Session deleted' });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+bookmarksRouter.get('/bookmarks', async (req, res, next) => {
+  try {
+    const requestedLimit = Number.parseInt(String(req.query.limit || '200'), 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(500, requestedLimit))
+      : 200;
+
+    const [totalBookmarks, bookmarkedMessages] = await Promise.all([
+      Message.countDocuments({ role: 'assistant', isBookmarked: true }),
+      Message.find(
+        { role: 'assistant', isBookmarked: true },
+        {
+          _id: 1,
+          sessionId: 1,
+          role: 1,
+          text: 1,
+          structuredAnswer: 1,
+          createdAt: 1,
+          bookmarkedAt: 1
+        }
+      )
+        .sort({ bookmarkedAt: -1, createdAt: -1 })
+        .limit(limit)
+        .lean()
+    ]);
+
+    if (!bookmarkedMessages.length) {
+      return res.json({ totalBookmarks, groups: [] });
+    }
+
+    const sessionIds = Array.from(new Set(bookmarkedMessages.map((message) => String(message.sessionId))));
+    const sessions = await Session.find(
+      { _id: { $in: sessionIds } },
+      { _id: 1, title: 1, disease: 1, updatedAt: 1 }
+    ).lean();
+    const sessionById = new Map(sessions.map((session) => [String(session._id), session]));
+
+    const groupsMap = new Map();
+    bookmarkedMessages.forEach((message) => {
+      const sessionId = String(message.sessionId);
+      const session = sessionById.get(sessionId);
+
+      if (!session) {
+        return;
+      }
+
+      if (!groupsMap.has(sessionId)) {
+        groupsMap.set(sessionId, {
+          sessionId,
+          sessionTitle: session.title || session.disease || 'Untitled session',
+          disease: session.disease || '',
+          updatedAt: session.updatedAt || null,
+          latestBookmarkAt: message.bookmarkedAt || message.createdAt || null,
+          bookmarks: []
+        });
+      }
+
+      const group = groupsMap.get(sessionId);
+      const bookmarkDate = message.bookmarkedAt || message.createdAt || null;
+
+      if (bookmarkDate && (!group.latestBookmarkAt || bookmarkDate > group.latestBookmarkAt)) {
+        group.latestBookmarkAt = bookmarkDate;
+      }
+
+      group.bookmarks.push({
+        messageId: String(message._id),
+        role: message.role,
+        text: buildMessageSnippet(message),
+        createdAt: message.createdAt || null,
+        bookmarkedAt: message.bookmarkedAt || null
+      });
+    });
+
+    const groups = Array.from(groupsMap.values())
+      .map((group) => ({
+        sessionId: group.sessionId,
+        sessionTitle: group.sessionTitle,
+        disease: group.disease,
+        updatedAt: group.updatedAt,
+        bookmarks: group.bookmarks.sort((a, b) => {
+          const aTime = new Date(a.bookmarkedAt || a.createdAt || 0).getTime();
+          const bTime = new Date(b.bookmarkedAt || b.createdAt || 0).getTime();
+          return bTime - aTime;
+        })
+      }))
+      .sort((a, b) => {
+        const aTime = new Date(a.bookmarks[0]?.bookmarkedAt || a.updatedAt || 0).getTime();
+        const bTime = new Date(b.bookmarks[0]?.bookmarkedAt || b.updatedAt || 0).getTime();
+        return bTime - aTime;
+      });
+
+    return res.json({ totalBookmarks, groups });
   } catch (err) {
     return next(err);
   }

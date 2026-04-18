@@ -3,16 +3,101 @@ import mongoose from 'mongoose';
 import Session from '../models/Session.js';
 import Message from '../models/Message.js';
 import { runRetrievalPipeline } from '../services/pipeline/orchestrator.js';
+<<<<<<< HEAD
 import { gzipCompression } from '../middleware/gzipCompression.js';
 import { invalidateSessionInsightsCache } from '../services/insightsCache.js';
 import { applyHealthResponseContractPatch } from '../services/healthContract.js';
+=======
+import { generateSmartSuggestions } from '../services/llm.js';
+import { invalidateInsightsCache } from '../middleware/insightsCache.js';
+import {
+  getCachedQueryResult,
+  setCachedQueryResult
+} from '../services/queryResultCache.js';
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
 const router = express.Router();
 applyHealthResponseContractPatch();
 router.use(gzipCompression());
 
+const COMMON_MEDICAL_TOPICS = [
+  'latest treatment guidelines',
+  'contraindications and side effects',
+  'dose adjustment in renal impairment',
+  'recruiting clinical trials',
+  'biomarkers and diagnostics',
+  'meta-analysis evidence quality',
+  'long-term outcome studies',
+  'drug interaction risk'
+];
+
+function normalizeHistoryItems(items) {
+  return (Array.isArray(items) ? items : [])
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .slice(-12);
+}
+
+router.get('/suggestions', async (req, res, next) => {
+  try {
+    const partialQuery = String(req.query.q || '').trim();
+    const requestedLimit = Number.parseInt(String(req.query.limit || '5'), 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(3, Math.min(5, requestedLimit))
+      : 5;
+
+    if (partialQuery.length < 2) {
+      return res.json({ suggestions: [] });
+    }
+
+    const history = [];
+    const sessionId = String(req.query.sessionId || '').trim();
+
+    if (sessionId && mongoose.Types.ObjectId.isValid(sessionId)) {
+      const session = await Session.findById(sessionId).select('disease queryHistory').lean();
+      if (session?.disease) {
+        history.push(`${session.disease} evidence update`);
+      }
+      history.push(...normalizeHistoryItems(session?.queryHistory));
+    }
+
+    if (history.length < 8) {
+      const recentSessions = await Session.find({}, { disease: 1, queryHistory: 1 })
+        .sort({ updatedAt: -1 })
+        .limit(8)
+        .lean();
+
+      recentSessions.forEach((session) => {
+        if (session?.disease) {
+          history.push(`${session.disease} research summary`);
+        }
+
+        normalizeHistoryItems(session?.queryHistory)
+          .slice(-4)
+          .forEach((item) => history.push(item));
+      });
+    }
+
+    const suggestions = await generateSmartSuggestions({
+      partialQuery,
+      history: normalizeHistoryItems(history),
+      commonTopics: COMMON_MEDICAL_TOPICS,
+      limit
+    });
+
+    return res.json({ suggestions });
+  } catch (err) {
+    if (err?.response?.status === 503 || err?.code === 'ECONNREFUSED' || err?.code === 'ETIMEDOUT') {
+      return res.status(503).json({ error: 'Suggestion service is currently unavailable.' });
+    }
+
+    return next(err);
+  }
+});
+
 router.post('/sessions/:id/query', async (req, res, next) => {
   try {
+    const requestStartedAt = Date.now();
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ error: 'Invalid session id' });
     }
@@ -36,6 +121,40 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       .limit(12)
       .lean();
 
+    let pipelineResult = getCachedQueryResult(session._id, cleanedMessage);
+    if (pipelineResult) {
+      pipelineResult.stats = {
+        ...(pipelineResult.stats || {}),
+        cacheHit: true,
+        timeTakenMs: Date.now() - requestStartedAt
+      };
+
+      const cachedPipelineTimings = Array.isArray(pipelineResult?.trace?.pipeline_timings)
+        ? pipelineResult.trace.pipeline_timings
+        : [];
+      pipelineResult.trace = {
+        ...(pipelineResult.trace || {}),
+        pipeline_timings: [
+          ...cachedPipelineTimings,
+          {
+            stage: 'query_response_cache_hit',
+            duration_ms: Date.now() - requestStartedAt
+          }
+        ]
+      };
+    } else {
+      const freshPipelineResult = await runRetrievalPipeline(session, cleanedMessage, conversationHistory.reverse());
+      pipelineResult = {
+        ...freshPipelineResult,
+        stats: {
+          ...(freshPipelineResult.stats || {}),
+          cacheHit: false
+        }
+      };
+
+      setCachedQueryResult(session._id, cleanedMessage, pipelineResult);
+    }
+
     const {
       responseText,
       structuredAnswer,
@@ -47,7 +166,11 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       contextBadge,
       sourceIndex,
       trace
+<<<<<<< HEAD
     } = await runRetrievalPipeline(session, cleanedMessage, conversationHistory.reverse());
+=======
+    } = pipelineResult;
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
     const createMessagesAndUpdateSession = async (dbSession = null) => {
       const writeOptions = dbSession ? { session: dbSession, ordered: true } : { ordered: true };
@@ -68,7 +191,8 @@ router.post('/sessions/:id/query', async (req, res, next) => {
             retrievalStats: stats,
             intentType,
             contextBadge,
-            structuredAnswer
+            structuredAnswer,
+            trace
           }
         ],
         writeOptions
@@ -115,17 +239,50 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       await txnSession.endSession();
     }
 
+    invalidateInsightsCache(session._id);
+
     const idToCitation = Object.entries(sourceIndex || {}).reduce((acc, [citationId, sourceId]) => {
       if (sourceId) {
         acc[String(sourceId)] = String(citationId);
       }
       return acc;
     }, {});
+    const confidenceByCitation = new Map(
+      (assistantMessage?.structuredAnswer?.confidence_breakdown || [])
+        .filter((entry) => entry?.source_id)
+        .map((entry) => [String(entry.source_id).toUpperCase(), entry])
+    );
 
+<<<<<<< HEAD
     const sourcesWithCitations = (contextDocs || []).map((doc) => ({
       ...doc,
       citationId: idToCitation[String(doc.id)] || null
     }));
+=======
+    const sourceDocsForPanel = Array.isArray(evidenceDocs) && evidenceDocs.length
+      ? evidenceDocs
+      : (contextDocs || []);
+
+    const sourcesWithCitations = sourceDocsForPanel.map((doc) => {
+      const citationId = idToCitation[String(doc.id)] || null;
+      const fallbackConfidence = {
+        source_id: citationId || String(doc.id || ''),
+        title: String(doc.title || citationId || doc.id || ''),
+        relevance_score: Number(doc.relevanceScore ?? doc.lastRelevanceScore ?? doc.finalScore ?? 0),
+        credibility_score: Number(doc.sourceCredibility ?? 0),
+        recency_score: Number(doc.recencyScore ?? 0),
+        composite_score: Number(doc.finalScore ?? doc.lastRelevanceScore ?? 0)
+      };
+
+      return {
+        ...doc,
+        citationId,
+        confidence_breakdown: citationId
+          ? confidenceByCitation.get(String(citationId).toUpperCase()) || fallbackConfidence
+          : fallbackConfidence
+      };
+    });
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
     invalidateSessionInsightsCache(session._id);
 

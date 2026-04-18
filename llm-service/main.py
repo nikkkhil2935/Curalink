@@ -1,5 +1,6 @@
 # pyright: reportUnknownVariableType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false, reportUnknownLambdaType=false, reportConstantRedefinition=false
 
+import asyncio
 import hashlib
 import importlib
 import json
@@ -8,6 +9,9 @@ import math
 import os
 import re
 import time
+from collections import OrderedDict
+from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Set, TypedDict
 
 import httpx
@@ -33,8 +37,9 @@ try:
 except Exception as exc:
     langgraph_import_error = str(exc)
 
+np: Any = None
 try:
-    import numpy as np
+    import numpy as np  # type: ignore[no-redef]
 except Exception:
     np = None
 
@@ -64,13 +69,17 @@ OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 OLLAMA_EMBED_TIMEOUT_SEC = float(os.getenv("OLLAMA_EMBED_TIMEOUT_SEC", "20"))
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-LOCAL_FALLBACK_ENABLED = os.getenv("LOCAL_FALLBACK_ENABLED", "true").lower() != "false"
+PRIMARY_LLM_PROVIDER = os.getenv("PRIMARY_LLM_PROVIDER", "groq").strip().lower()
+LOCAL_FALLBACK_ENABLED = os.getenv("LOCAL_FALLBACK_ENABLED", "false").lower() != "false"
 FALLBACK_EMBED_DIM = max(32, int(os.getenv("FALLBACK_EMBED_DIM", "384")))
 USE_LANGGRAPH_WORKFLOW = os.getenv("USE_LANGGRAPH_WORKFLOW", "true").lower() != "false"
+SEMANTIC_CACHE_THRESHOLD = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.92"))
+SEMANTIC_CACHE_MAX_SIZE = max(16, int(os.getenv("SEMANTIC_CACHE_MAX_SIZE", "256")))
 LAST_GENERATION_PROVIDER = "none"
 LAST_GENERATION_AT: Optional[float] = None
 EMBEDDING_BACKEND = "hash-fallback"
 EMBEDDING_MODEL = "hash-fallback"
+<<<<<<< HEAD
 SEMANTIC_CACHE_TTL_SEC = max(30.0, float(os.getenv("SEMANTIC_CACHE_TTL_SEC", "300")))
 SEMANTIC_CACHE_MAX_ENTRIES = max(10, int(os.getenv("SEMANTIC_CACHE_MAX_ENTRIES", "300")))
 SEMANTIC_CACHE_SIMILARITY_THRESHOLD = max(
@@ -82,6 +91,12 @@ semantic_response_cache = SemanticLRUCache(
     ttl_seconds=SEMANTIC_CACHE_TTL_SEC,
     similarity_threshold=SEMANTIC_CACHE_SIMILARITY_THRESHOLD,
 )
+=======
+SERVICE_STARTED_AT = time.time()
+
+semantic_response_cache: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
+semantic_cache_lock = asyncio.Lock()
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
 embed_model = None
 if SentenceTransformer is not None and np is not None:
@@ -115,6 +130,23 @@ class RerankRequest(BaseModel):
     top_k: int = 15
 
 
+class SuggestRequest(BaseModel):
+    partial_query: str
+    history: List[str] = Field(default_factory=list)
+    common_topics: List[str] = Field(default_factory=list)
+    limit: int = 5
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def clamp_limit(cls, value: Any) -> int:
+        try:
+            numeric = int(value)
+        except (TypeError, ValueError):
+            return 5
+
+        return max(3, min(5, numeric))
+
+
 class ResearchInsightModel(BaseModel):
     insight: str = ""
     type: Literal["TREATMENT", "DIAGNOSIS", "RISK", "PREVENTION", "GENERAL"] = "GENERAL"
@@ -129,6 +161,40 @@ class ClinicalTrialModel(BaseModel):
     source_ids: List[str] = Field(default_factory=list)
 
 
+class ConfidenceBreakdownModel(BaseModel):
+    source_id: str = ""
+    title: str = ""
+    relevance_score: float = 0.0
+    credibility_score: float = 0.0
+    recency_score: float = 0.0
+    composite_score: float = 0.0
+
+    @field_validator("source_id", mode="before")
+    @classmethod
+    def normalize_source_id(cls, value: Any) -> str:
+        return str(value or "").strip().upper()
+
+    @field_validator(
+        "relevance_score",
+        "credibility_score",
+        "recency_score",
+        "composite_score",
+        mode="before",
+    )
+    @classmethod
+    def normalize_score(cls, value: Any) -> float:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+        if numeric < 0:
+            return 0.0
+        if numeric > 1:
+            return 1.0
+        return numeric
+
+
 class StructuredAnswerModel(BaseModel):
     condition_overview: str = ""
     evidence_strength: Literal["LIMITED", "MODERATE", "STRONG"] = "MODERATE"
@@ -137,6 +203,7 @@ class StructuredAnswerModel(BaseModel):
     key_researchers: List[str] = Field(default_factory=list)
     recommendations: str = ""
     follow_up_suggestions: List[str] = Field(default_factory=list)
+    confidence_breakdown: List[ConfidenceBreakdownModel] = Field(default_factory=list)
 
     @field_validator("evidence_strength", mode="before")
     @classmethod
@@ -270,6 +337,31 @@ def normalize_source_ids(source_ids: List[str], allowed_set: Set[str]) -> List[s
     return normalized
 
 
+def clamp_score(value: Any, fallback: float = 0.5) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+    if numeric < 0:
+        return 0.0
+    if numeric > 1:
+        return 1.0
+    return numeric
+
+
+def build_default_confidence_entry(citation_id: str) -> Dict[str, Any]:
+    normalized = str(citation_id or "").strip().upper()
+    return {
+        "source_id": normalized,
+        "title": normalized,
+        "relevance_score": 0.5,
+        "credibility_score": 0.7,
+        "recency_score": 0.5,
+        "composite_score": 0.55,
+    }
+
+
 def ensure_structured_schema(payload: Dict[str, Any], allowed_citations: List[str]) -> Dict[str, Any]:
     validated = StructuredAnswerModel.model_validate(payload).model_dump()
 
@@ -297,48 +389,89 @@ def ensure_structured_schema(payload: Dict[str, Any], allowed_citations: List[st
     validated["follow_up_suggestions"] = follow_up_suggestions[:3]
 
     allowed_set = set(allowed_citations)
-    if not allowed_set:
-        return validated
+    if allowed_set:
+        publication_citations = [citation for citation in allowed_citations if citation.startswith("P")]
+        trial_citations = [citation for citation in allowed_citations if citation.startswith("T")]
 
-    publication_citations = [citation for citation in allowed_citations if citation.startswith("P")]
-    trial_citations = [citation for citation in allowed_citations if citation.startswith("T")]
+        clean_research: List[Dict[str, Any]] = []
+        for item in validated.get("research_insights", []):
+            normalized_source_ids = normalize_source_ids(item.get("source_ids") or [], allowed_set)
+            if normalized_source_ids:
+                item["source_ids"] = normalized_source_ids
+                clean_research.append(item)
 
-    clean_research: List[Dict[str, Any]] = []
-    for item in validated.get("research_insights", []):
-        normalized_source_ids = normalize_source_ids(item.get("source_ids") or [], allowed_set)
-        if normalized_source_ids:
-            item["source_ids"] = normalized_source_ids
-            clean_research.append(item)
+        clean_trials: List[Dict[str, Any]] = []
+        for item in validated.get("clinical_trials", []):
+            normalized_source_ids = normalize_source_ids(item.get("source_ids") or [], allowed_set)
+            if normalized_source_ids:
+                item["source_ids"] = normalized_source_ids
+                clean_trials.append(item)
 
-    clean_trials: List[Dict[str, Any]] = []
-    for item in validated.get("clinical_trials", []):
-        normalized_source_ids = normalize_source_ids(item.get("source_ids") or [], allowed_set)
-        if normalized_source_ids:
-            item["source_ids"] = normalized_source_ids
-            clean_trials.append(item)
+        if not clean_research and publication_citations:
+            clean_research.append(
+                {
+                    "insight": "Top publication evidence was reviewed from the retrieved context.",
+                    "type": "GENERAL",
+                    "source_ids": [publication_citations[0]],
+                }
+            )
 
-    if not clean_research and publication_citations:
-        clean_research.append(
-            {
-                "insight": "Top publication evidence was reviewed from the retrieved context.",
-                "type": "GENERAL",
-                "source_ids": [publication_citations[0]],
-            }
+        if not clean_trials and trial_citations:
+            clean_trials.append(
+                {
+                    "summary": "A relevant clinical trial was identified in the retrieved results.",
+                    "status": "UNKNOWN",
+                    "location_relevant": False,
+                    "contact": "",
+                    "source_ids": [trial_citations[0]],
+                }
+            )
+
+        validated["research_insights"] = clean_research
+        validated["clinical_trials"] = clean_trials
+
+    normalized_breakdown: List[Dict[str, Any]] = []
+    seen_breakdown_ids: Set[str] = set()
+
+    for item in validated.get("confidence_breakdown", []):
+        source_id = str(item.get("source_id") or "").strip().upper()
+        if not source_id:
+            continue
+
+        if allowed_set and source_id not in allowed_set:
+            continue
+
+        if source_id in seen_breakdown_ids:
+            continue
+
+        relevance = clamp_score(item.get("relevance_score"), 0.5)
+        credibility = clamp_score(item.get("credibility_score"), 0.7)
+        recency = clamp_score(item.get("recency_score"), 0.5)
+        composite = clamp_score(
+            item.get("composite_score"),
+            relevance * 0.45 + credibility * 0.25 + recency * 0.3,
         )
 
-    if not clean_trials and trial_citations:
-        clean_trials.append(
+        normalized_breakdown.append(
             {
-                "summary": "A relevant clinical trial was identified in the retrieved results.",
-                "status": "UNKNOWN",
-                "location_relevant": False,
-                "contact": "",
-                "source_ids": [trial_citations[0]],
+                "source_id": source_id,
+                "title": str(item.get("title") or source_id),
+                "relevance_score": relevance,
+                "credibility_score": credibility,
+                "recency_score": recency,
+                "composite_score": composite,
             }
         )
+        seen_breakdown_ids.add(source_id)
 
-    validated["research_insights"] = clean_research
-    validated["clinical_trials"] = clean_trials
+    if allowed_citations:
+        for citation in allowed_citations:
+            normalized_citation = str(citation or "").strip().upper()
+            if normalized_citation and normalized_citation not in seen_breakdown_ids:
+                normalized_breakdown.append(build_default_confidence_entry(normalized_citation))
+                seen_breakdown_ids.add(normalized_citation)
+
+    validated["confidence_breakdown"] = normalized_breakdown
 
     return validated
 
@@ -364,50 +497,70 @@ def build_prompt_messages(system_prompt: str, user_prompt: str) -> List[Dict[str
     return messages
 
 
+def get_generation_provider_order() -> List[str]:
+    preferred = PRIMARY_LLM_PROVIDER if PRIMARY_LLM_PROVIDER in {"groq", "ollama"} else "groq"
+    if preferred == "ollama":
+        return ["ollama", "groq"]
+    return ["groq", "ollama"]
+
+
 async def invoke_provider_chain(
     req: GenerateRequest,
     messages: List[Dict[str, str]],
     allowed_citations: List[str],
 ) -> Dict[str, Any]:
-    provider = "ollama"
-    model_name = OLLAMA_MODEL
+    provider = "none"
+    model_name = "none"
     raw_text = ""
-    provider_errors = []
+    provider_errors: List[str] = []
+    provider_order = get_generation_provider_order()
 
     async with httpx.AsyncClient(timeout=120) as client:
-        try:
-            response = await client.post(
-                f"{OLLAMA_URL}/api/chat",
-                json={
-                    "model": OLLAMA_MODEL,
-                    "messages": messages,
-                    "stream": False,
-                    "options": {
-                        "temperature": req.temperature,
-                        "num_predict": req.max_tokens,
-                        "top_p": 0.9,
-                        "repeat_penalty": 1.1,
-                    },
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-            raw_text = data.get("message", {}).get("content", "")
-        except Exception as ollama_exc:
-            provider_errors.append(f"ollama: {ollama_exc}")
+        for candidate in provider_order:
+            if raw_text:
+                break
 
-        if not raw_text and GROQ_API_KEY:
-            try:
+            if candidate == "groq":
+                if not GROQ_API_KEY:
+                    provider_errors.append("groq: GROQ_API_KEY not configured")
+                    continue
+
                 provider = "groq"
                 model_name = GROQ_MODEL
-                raw_text = await call_groq(
-                    client,
-                    messages,
-                    temperature=req.temperature,
-                    max_tokens=req.max_tokens,
-                )
-            except Exception as groq_exc:
-                provider_errors.append(f"groq: {groq_exc}")
+                try:
+                    raw_text = await call_groq(
+                        client,
+                        messages,
+                        temperature=req.temperature,
+                        max_tokens=req.max_tokens,
+                    )
+                except Exception as groq_exc:
+                    provider_errors.append(f"groq: {groq_exc}")
+                continue
+
+            if candidate == "ollama":
+                provider = "ollama"
+                model_name = OLLAMA_MODEL
+                try:
+                    response = await client.post(
+                        f"{OLLAMA_URL}/api/chat",
+                        json={
+                            "model": OLLAMA_MODEL,
+                            "messages": messages,
+                            "stream": False,
+                            "options": {
+                                "temperature": req.temperature,
+                                "num_predict": req.max_tokens,
+                                "top_p": 0.9,
+                                "repeat_penalty": 1.1,
+                            },
+                        },
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    raw_text = data.get("message", {}).get("content", "")
+                except Exception as ollama_exc:
+                    provider_errors.append(f"ollama: {ollama_exc}")
 
         if not raw_text and LOCAL_FALLBACK_ENABLED:
             provider = "local"
@@ -420,7 +573,7 @@ async def invoke_provider_chain(
         if not raw_text:
             raise HTTPException(
                 status_code=503,
-                detail="No LLM provider available. Start Ollama, configure GROQ_API_KEY, or enable LOCAL_FALLBACK_ENABLED.",
+                detail="No LLM provider available. Configure GROQ_API_KEY, start Ollama, or enable LOCAL_FALLBACK_ENABLED.",
             )
 
     return {
@@ -458,8 +611,8 @@ async def provider_generation_node(state: GenerationState) -> GenerationState:
 
     return {
         "raw_text": str(provider_result.get("raw_text", "")),
-        "provider": str(provider_result.get("provider", "local")),
-        "model": str(provider_result.get("model", "curalink-local-fallback")),
+        "provider": str(provider_result.get("provider", "groq")),
+        "model": str(provider_result.get("model", GROQ_MODEL if GROQ_API_KEY else OLLAMA_MODEL)),
         "provider_errors": list(provider_result.get("provider_errors", [])),
         "needs_fallback": False,
     }
@@ -537,79 +690,383 @@ if USE_LANGGRAPH_WORKFLOW and StateGraph is not None and END is not None:
 
 @app.get("/health")
 async def health():
-    """Check provider readiness for Ollama and optional Groq fallback."""
-    ollama_status = {
-        "status": "offline",
-        "model": OLLAMA_MODEL,
-        "model_available": False,
-        "embed_model": OLLAMA_EMBED_MODEL,
-        "embed_model_available": False,
-        "available_models": [],
+    llm_status = await detect_llm_status()
+    return build_health_payload(llm_status)
+
+
+@app.get("/api/health")
+async def api_health():
+    llm_status = await detect_llm_status()
+    return build_health_payload(llm_status)
+
+
+def now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def build_health_payload(llm_status: str) -> Dict[str, Any]:
+    return {
+        "status": "ok" if llm_status != "offline" else "degraded",
+        "version": app.version,
+        "uptime_ms": int((time.time() - SERVICE_STARTED_AT) * 1000),
+        "services": {
+            "llm": llm_status,
+            "db": "not_configured",
+        },
+        "timestamp": now_utc_iso(),
     }
+
+
+async def detect_llm_status() -> str:
+    if PRIMARY_LLM_PROVIDER == "groq" and bool(GROQ_API_KEY):
+        return "online"
+
+    ollama_online = False
+    ollama_model_available = False
 
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             response = await client.get(f"{OLLAMA_URL}/api/tags")
             response.raise_for_status()
             models = [model.get("name", "") for model in response.json().get("models", [])]
-            ollama_status = {
-                "status": "online",
-                "model": OLLAMA_MODEL,
-                "model_available": any(OLLAMA_MODEL in model_name for model_name in models),
-                "embed_model": OLLAMA_EMBED_MODEL,
-                "embed_model_available": any(OLLAMA_EMBED_MODEL in model_name for model_name in models),
-                "available_models": models[:10],
-            }
-    except Exception as exc:
-        ollama_status["error"] = str(exc)
+            ollama_online = True
+            ollama_model_available = any(OLLAMA_MODEL in model_name for model_name in models)
+    except Exception:
+        ollama_online = False
 
-    groq_status = {
-        "configured": bool(GROQ_API_KEY),
-        "model": GROQ_MODEL,
+    if (ollama_online and ollama_model_available) or bool(GROQ_API_KEY):
+        return "online"
+
+    if LOCAL_FALLBACK_ENABLED:
+        return "degraded"
+
+    return "offline"
+
+
+def add_stage_timing(pipeline_timings: List[Dict[str, Any]], stage: str, stage_start: float) -> None:
+    duration_ms = round((time.perf_counter() - stage_start) * 1000, 2)
+    pipeline_timings.append({"stage": stage, "duration_ms": duration_ms})
+
+
+def normalize_embedding(vector: List[float]) -> List[float]:
+    norm = math.sqrt(sum(float(value) * float(value) for value in vector))
+    if norm <= 0:
+        return [0.0 for _ in vector]
+    return [float(value) / norm for value in vector]
+
+
+def is_local_fallback_payload(payload: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+
+    provider = str(payload.get("provider") or "").strip().lower()
+    model_name = str(payload.get("model") or "").strip().lower()
+
+    if provider in {"local", "none"}:
+        return True
+
+    if model_name == "curalink-local-fallback":
+        return True
+
+    parsed = payload.get("parsed")
+    if isinstance(parsed, dict):
+        overview = str(parsed.get("condition_overview") or "").lower()
+        if "local fallback engine" in overview:
+            return True
+
+    return False
+
+
+def build_semantic_cache_key(query_embedding: List[float]) -> str:
+    rounded = ",".join(f"{value:.6f}" for value in query_embedding)
+    return hashlib.sha256(rounded.encode("utf-8")).hexdigest()
+
+
+async def generate_query_embedding(text: str) -> List[float]:
+    normalized_text = str(text or "").strip()[:512]
+
+    if embed_model is not None and np is not None:
+        vector = embed_model.encode([normalized_text], normalize_embeddings=True)[0]
+        return normalize_embedding([float(value) for value in vector])
+
+    ollama_embeddings, _, _ = await generate_ollama_embeddings([normalized_text])
+    if ollama_embeddings and len(ollama_embeddings) == 1:
+        return normalize_embedding([float(value) for value in ollama_embeddings[0]])
+
+    return normalize_embedding(build_hash_embedding(normalized_text))
+
+
+async def lookup_semantic_cache(query_embedding: List[float]) -> tuple[Optional[Dict[str, Any]], float]:
+    best_similarity = -1.0
+    best_key: Optional[str] = None
+    best_payload: Optional[Dict[str, Any]] = None
+
+    async with semantic_cache_lock:
+        stale_keys: List[str] = []
+
+        for key, entry in semantic_response_cache.items():
+            payload = entry.get("payload")
+            if is_local_fallback_payload(payload):
+                stale_keys.append(key)
+                continue
+
+            cached_embedding = entry.get("embedding") or []
+            similarity = cosine_similarity(cached_embedding, query_embedding)
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_key = key
+                best_payload = payload
+
+        for stale_key in stale_keys:
+            semantic_response_cache.pop(stale_key, None)
+
+        if best_key is None or best_payload is None or best_similarity < SEMANTIC_CACHE_THRESHOLD:
+            return None, best_similarity
+
+        semantic_response_cache.move_to_end(best_key)
+        return deepcopy(best_payload), best_similarity
+
+
+async def store_semantic_cache(query_embedding: List[float], payload: Dict[str, Any]) -> None:
+    if is_local_fallback_payload(payload):
+        return
+
+    cache_key = build_semantic_cache_key(query_embedding)
+    cache_entry = {
+        "embedding": query_embedding,
+        "payload": deepcopy(payload),
+        "created_at": time.time(),
     }
 
-    local_status = {
-        "available": LOCAL_FALLBACK_ENABLED,
-        "model": "curalink-local-fallback",
-    }
+    async with semantic_cache_lock:
+        semantic_response_cache[cache_key] = cache_entry
+        semantic_response_cache.move_to_end(cache_key)
 
-    is_ready = (
-        ollama_status["status"] == "online"
-        or groq_status["configured"]
-        or local_status["available"]
+        while len(semantic_response_cache) > SEMANTIC_CACHE_MAX_SIZE:
+            semantic_response_cache.popitem(last=False)
+
+
+def sanitize_suggestion_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    text = re.sub(r"^[\-\*\d\).\s]+", "", text)
+    text = re.sub(r"\s+", " ", text).strip().strip('"')
+    if not text:
+        return ""
+
+    if text[-1] not in {"?", "."}:
+        text = f"{text}?"
+
+    return text
+
+
+def normalize_suggestions(
+    items: List[Any],
+    partial_query: str,
+    history: List[str],
+    common_topics: List[str],
+    limit: int,
+) -> List[str]:
+    normalized: List[str] = []
+    seen: Set[str] = set()
+    trimmed_partial = partial_query.strip().rstrip("?").strip()
+
+    def push(candidate: Any) -> None:
+        text = sanitize_suggestion_text(candidate)
+        if not text:
+            return
+
+        key = text.lower()
+        if key in seen:
+            return
+
+        seen.add(key)
+        normalized.append(text)
+
+    for item in items:
+        push(item)
+
+    blended_topics = [
+        *[str(entry or "").strip() for entry in history],
+        *[str(entry or "").strip() for entry in common_topics],
+    ]
+
+    for topic in blended_topics:
+        if len(normalized) >= limit:
+            break
+
+        if not topic:
+            continue
+
+        if trimmed_partial and topic.lower().startswith(trimmed_partial.lower()):
+            push(topic)
+            continue
+
+        if trimmed_partial:
+            push(f"{trimmed_partial} {topic}")
+
+    if len(normalized) < limit and trimmed_partial:
+        templates = [
+            f"{trimmed_partial} treatment options with highest evidence quality",
+            f"{trimmed_partial} adverse effects and contraindications",
+            f"{trimmed_partial} currently recruiting clinical trials",
+            f"{trimmed_partial} comparative efficacy across recent studies",
+            f"{trimmed_partial} guideline updates and standard of care",
+        ]
+        for template in templates:
+            if len(normalized) >= limit:
+                break
+            push(template)
+
+    return normalized[:limit]
+
+
+def parse_suggestion_candidates(raw_text: str) -> List[str]:
+    parsed = extract_json(raw_text)
+
+    if isinstance(parsed, dict):
+        raw_items = parsed.get("suggestions") or parsed.get("items") or []
+        return [str(item) for item in raw_items] if isinstance(raw_items, list) else []
+
+    if isinstance(parsed, list):
+        return [str(item) for item in parsed]
+
+    candidates: List[str] = []
+    for line in str(raw_text or "").splitlines():
+        cleaned = re.sub(r"^[\-\*\d\).\s]+", "", line).strip()
+        if cleaned:
+            candidates.append(cleaned)
+
+    return candidates
+
+
+def build_local_query_suggestions(
+    partial_query: str,
+    history: List[str],
+    common_topics: List[str],
+    limit: int,
+) -> List[str]:
+    return normalize_suggestions([], partial_query, history, common_topics, limit)
+
+
+async def call_suggestion_provider(
+    partial_query: str,
+    history: List[str],
+    common_topics: List[str],
+    limit: int,
+) -> tuple[str, str, str]:
+    provider = "none"
+    model_name = "none"
+    raw_text = ""
+    provider_order = get_generation_provider_order()
+
+    history_excerpt = "\n".join(f"- {item}" for item in history[-8:]) or "- none"
+    topic_excerpt = ", ".join(common_topics[:8]) or "none"
+
+    system_message = (
+        "You are a clinical autocomplete assistant. "
+        "Return strict JSON only as {\"suggestions\": [\"...\"]}. "
+        "Generate concise medically relevant query continuations."
     )
-
-    ollama_embeddings_ready = ollama_status["status"] == "online" and (
-        bool(ollama_status.get("embed_model_available"))
-        or bool(ollama_status.get("model_available"))
+    user_message = (
+        f"Partial query: {partial_query}\n"
+        f"Recent query history:\n{history_excerpt}\n"
+        f"Common medical topics: {topic_excerpt}\n"
+        f"Return exactly {limit} suggestions."
     )
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": user_message},
+    ]
 
-    if EMBEDDING_BACKEND == "sentence-transformers":
-        embeddings_mode = "sentence-transformers"
-        embeddings_model = EMBEDDING_MODEL
-        embeddings_error = None
-    elif ollama_embeddings_ready:
-        embeddings_mode = "ollama"
-        embeddings_model = (
-            OLLAMA_EMBED_MODEL
-            if ollama_status.get("embed_model_available")
-            else OLLAMA_MODEL
-        )
-        embeddings_error = None
-    else:
-        embeddings_mode = "hash-fallback"
-        embeddings_model = "hash-fallback"
-        embeddings_error = embedding_import_error
+    async with httpx.AsyncClient(timeout=25) as client:
+        for candidate in provider_order:
+            if raw_text:
+                break
 
-    last_generation_age = (
-        round(time.time() - LAST_GENERATION_AT, 2)
-        if LAST_GENERATION_AT is not None
-        else None
+            if candidate == "groq":
+                if not GROQ_API_KEY:
+                    continue
+
+                provider = "groq"
+                model_name = GROQ_MODEL
+                try:
+                    raw_text = await call_groq(client, messages, temperature=0.2, max_tokens=220)
+                except Exception:
+                    raw_text = ""
+                continue
+
+            if candidate == "ollama":
+                provider = "ollama"
+                model_name = OLLAMA_MODEL
+                try:
+                    response = await client.post(
+                        f"{OLLAMA_URL}/api/chat",
+                        json={
+                            "model": OLLAMA_MODEL,
+                            "messages": messages,
+                            "stream": False,
+                            "options": {
+                                "temperature": 0.2,
+                                "num_predict": 220,
+                                "top_p": 0.9,
+                            },
+                        },
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    raw_text = str(data.get("message", {}).get("content", ""))
+                except Exception:
+                    raw_text = ""
+
+        if not raw_text and LOCAL_FALLBACK_ENABLED:
+            provider = "local"
+            model_name = "curalink-local-fallback"
+            raw_text = json.dumps(
+                {
+                    "suggestions": build_local_query_suggestions(
+                        partial_query,
+                        history,
+                        common_topics,
+                        limit,
+                    )
+                },
+                ensure_ascii=True,
+            )
+
+        if not raw_text:
+            raise HTTPException(
+                status_code=503,
+                detail="No suggestion provider available. Configure GROQ_API_KEY, start Ollama, or enable LOCAL_FALLBACK_ENABLED.",
+            )
+
+    return raw_text, provider, model_name
+
+
+@app.post("/suggestions")
+async def suggest(req: SuggestRequest):
+    partial_query = str(req.partial_query or "").strip()
+    if len(partial_query) < 2:
+        return {"suggestions": []}
+
+    history = [str(item or "").strip() for item in req.history if str(item or "").strip()]
+    common_topics = [str(item or "").strip() for item in req.common_topics if str(item or "").strip()]
+
+    raw_text, provider, model_name = await call_suggestion_provider(
+        partial_query,
+        history,
+        common_topics,
+        req.limit,
     )
+    raw_candidates = parse_suggestion_candidates(raw_text)
+    suggestions = normalize_suggestions(raw_candidates, partial_query, history, common_topics, req.limit)
 
     llm_service_status = "online" if is_ready else "degraded"
 
     return {
+<<<<<<< HEAD
         "status": "ok" if is_ready else "degraded",
         "version": app.version,
         "uptime_ms": int((time.time() - SERVICE_START_AT) * 1000),
@@ -636,6 +1093,11 @@ async def health():
         },
         "effective_generation_provider": LAST_GENERATION_PROVIDER,
         "effective_generation_age_seconds": last_generation_age,
+=======
+        "suggestions": suggestions,
+        "provider": provider,
+        "model": model_name,
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     }
 
 
@@ -648,6 +1110,7 @@ async def api_health():
 async def generate(req: GenerateRequest):
     """Generate an LLM response using a LangGraph-orchestrated RAG flow."""
     global LAST_GENERATION_PROVIDER, LAST_GENERATION_AT
+<<<<<<< HEAD
     started_at = time.perf_counter()
     logger.info("[generate:start] model=%s temp=%s", OLLAMA_MODEL, req.temperature)
 
@@ -712,6 +1175,38 @@ async def generate(req: GenerateRequest):
     try:
         if LANGGRAPH_WORKFLOW is not None:
             workflow_started = time.perf_counter()
+=======
+    flow_start = time.perf_counter()
+    pipeline_timings: List[Dict[str, Any]] = []
+
+    try:
+        provider_errors = []
+
+        cache_lookup_start = time.perf_counter()
+        query_embedding = await generate_query_embedding(req.user_prompt)
+        cached_payload, cache_similarity = await lookup_semantic_cache(query_embedding)
+        add_stage_timing(pipeline_timings, "semantic_cache_lookup", cache_lookup_start)
+
+        if cached_payload is not None:
+            LAST_GENERATION_PROVIDER = "semantic-cache"
+            LAST_GENERATION_AT = time.time()
+
+            add_stage_timing(pipeline_timings, "total", flow_start)
+
+            return {
+                "text": cached_payload.get("text", ""),
+                "parsed": cached_payload.get("parsed"),
+                "model": cached_payload.get("model", "cached"),
+                "provider": "semantic-cache",
+                "elapsed_seconds": round(time.perf_counter() - flow_start, 4),
+                "semantic_cache_hit": True,
+                "semantic_cache_similarity": round(max(cache_similarity, 0.0), 4),
+                "pipeline_timings": pipeline_timings,
+            }
+
+        if LANGGRAPH_WORKFLOW is not None:
+            workflow_start = time.perf_counter()
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
             workflow_state = await LANGGRAPH_WORKFLOW.ainvoke(
                 {
                     "system_prompt": req.system_prompt,
@@ -720,6 +1215,7 @@ async def generate(req: GenerateRequest):
                     "max_tokens": req.max_tokens,
                 }
             )
+<<<<<<< HEAD
             append_pipeline_timing(pipeline_timings, "workflow_invoke", workflow_started)
 
             raw_text = str(workflow_state.get("raw_text", ""))
@@ -736,8 +1232,24 @@ async def generate(req: GenerateRequest):
                 append_pipeline_timing(pipeline_timings, "parse_json", parse_started)
         else:
             invoke_started = time.perf_counter()
+=======
+            add_stage_timing(pipeline_timings, "langgraph_workflow", workflow_start)
+
+            raw_text = workflow_state.get("raw_text", "")
+            parsed = workflow_state.get("parsed")
+            provider = workflow_state.get("provider", "local")
+            model_name = workflow_state.get("model", "curalink-local-fallback")
+            provider_errors = workflow_state.get("provider_errors", [])
+        else:
+            prepare_start = time.perf_counter()
+            allowed_citations = extract_allowed_citations(req.user_prompt)
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
             messages = build_prompt_messages(req.system_prompt, req.user_prompt)
+            add_stage_timing(pipeline_timings, "prepare_messages", prepare_start)
+
+            provider_start = time.perf_counter()
             provider_result = await invoke_provider_chain(req, messages, allowed_citations)
+<<<<<<< HEAD
             append_pipeline_timing(pipeline_timings, "provider_invoke", invoke_started)
 
             raw_text = str(provider_result["raw_text"])
@@ -752,12 +1264,25 @@ async def generate(req: GenerateRequest):
         if parsed:
             validation_started = time.perf_counter()
             try:
+=======
+            add_stage_timing(pipeline_timings, "provider_generation", provider_start)
+
+            raw_text = provider_result["raw_text"]
+            provider = provider_result["provider"]
+            model_name = provider_result["model"]
+            provider_errors = provider_result.get("provider_errors", [])
+
+            parse_start = time.perf_counter()
+            parsed = extract_json(raw_text)
+            if parsed is not None:
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
                 parsed = ensure_structured_schema(parsed, allowed_citations)
             except ValidationError as exc:
                 validation_error = str(exc)
                 fallback_used = True
                 fallback_reason = validation_error
                 parsed = build_local_fallback_answer(req.user_prompt, allowed_citations)
+<<<<<<< HEAD
                 raw_text = json.dumps(parsed, ensure_ascii=True)
                 provider = "local"
                 model_name = "curalink-local-fallback"
@@ -795,6 +1320,27 @@ async def generate(req: GenerateRequest):
         append_pipeline_timing(pipeline_timings, "semantic_cache_store", cache_store_started)
 
         elapsed_seconds = time.perf_counter() - started_at
+=======
+            else:
+                parsed = None
+            add_stage_timing(pipeline_timings, "parse_and_validate", parse_start)
+
+        cache_store_start = time.perf_counter()
+        await store_semantic_cache(
+            query_embedding,
+            {
+                "text": raw_text,
+                "parsed": parsed,
+                "model": model_name,
+                "provider": provider,
+            },
+        )
+        add_stage_timing(pipeline_timings, "semantic_cache_store", cache_store_start)
+
+        add_stage_timing(pipeline_timings, "total", flow_start)
+
+        elapsed = round(time.perf_counter() - flow_start, 4)
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
         LAST_GENERATION_PROVIDER = provider
         LAST_GENERATION_AT = time.time()
 
@@ -804,6 +1350,7 @@ async def generate(req: GenerateRequest):
             logger.warning("Structured fallback used: %s", fallback_reason or "unknown")
         logger.info("LLM generated via %s in %ss, length=%s", provider, round(elapsed_seconds, 3), len(raw_text))
 
+<<<<<<< HEAD
         return build_generate_response(
             text=raw_text,
             parsed=parsed,
@@ -837,6 +1384,20 @@ async def generate(req: GenerateRequest):
             cache_hit=False,
             cache_similarity=cache_similarity,
         )
+=======
+        return {
+            "text": raw_text,
+            "parsed": parsed,
+            "model": model_name,
+            "provider": provider,
+            "elapsed_seconds": elapsed,
+            "semantic_cache_hit": False,
+            "semantic_cache_similarity": None,
+            "pipeline_timings": pipeline_timings,
+        }
+    except httpx.TimeoutException as exc:
+        raise HTTPException(503, "LLM service timeout. The model may still be loading.") from exc
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     except ValidationError as exc:
         validation_started = time.perf_counter()
         append_pipeline_timing(pipeline_timings, "exception_validation", validation_started)
@@ -903,7 +1464,7 @@ async def call_groq(
     temperature: float,
     max_tokens: int,
 ) -> str:
-    """Call Groq Chat Completions API as a hosted fallback when Ollama is unavailable."""
+    """Call Groq Chat Completions API as the hosted primary/fallback generation provider."""
     response = await client.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
@@ -1096,7 +1657,12 @@ async def rerank(req: RerankRequest):
         {"id": req.documents[index].get("id"), "score": float(scores[index])}
         for index in range(len(req.documents))
     ]
-    ranked.sort(key=lambda item: item["score"], reverse=True)
+
+    def score_key(item: Dict[str, Any]) -> float:
+        raw_score = item.get("score")
+        return float(raw_score) if isinstance(raw_score, (int, float)) else 0.0
+
+    ranked.sort(key=score_key, reverse=True)
 
     return {"ranked": ranked[: req.top_k], "embeddingMode": embedding_mode}
 
@@ -1166,6 +1732,18 @@ def build_local_fallback_answer(
             }
         )
 
+    confidence_breakdown = [
+        {
+            "source_id": citation,
+            "title": citation,
+            "relevance_score": 0.5,
+            "credibility_score": 0.7,
+            "recency_score": 0.5,
+            "composite_score": 0.55,
+        }
+        for citation in citations
+    ]
+
     return {
         "condition_overview": (
             "External model providers were unavailable, so this response was generated by the local fallback engine. "
@@ -1183,7 +1761,8 @@ def build_local_fallback_answer(
             "Can you summarize the highest ranked publications?",
             "Can you focus on recruiting clinical trials near my location?",
             "Can you compare benefits and risks from the retrieved studies?"
-        ]
+        ],
+        "confidence_breakdown": confidence_breakdown,
     }
 
 

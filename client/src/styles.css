@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+=======
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 @import 'tailwindcss';
 
 /* ═══════════════════════════════════════════════════
@@ -7,6 +11,7 @@
 ═══════════════════════════════════════════════════ */
 
 @theme {
+<<<<<<< HEAD
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
@@ -70,6 +75,43 @@
   --shadow-panel:   0 0 0 1px rgba(255,255,255,0.05), 0 8px 32px -8px rgba(0,0,0,0.5);
   --shadow-card:    0 1px 0 rgba(255,255,255,0.04), 0 4px 12px rgba(0,0,0,0.3);
   --glow-brand:     0 0 30px rgba(37,99,235,0.15);
+=======
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  color-scheme: light;
+  --color-gray-950: #f6f9fd;
+  --color-gray-900: #ffffff;
+  --color-gray-800: #d7e2f0;
+  --color-gray-700: #bacbe0;
+  --color-gray-600: #9eb2ca;
+  --color-gray-500: #7e95b0;
+  --color-gray-400: #647c9a;
+  --color-gray-300: #4c6483;
+  --color-gray-200: #344d6e;
+  --color-gray-100: #1a2e4a;
+  --bg-canvas: #f6f9fd;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #eef4fc;
+  --bg-surface-3: #e4eefb;
+  --border-subtle: #c5d4e8;
+  --border-strong: #9eb4cf;
+  --text-primary: #10253f;
+  --text-secondary: #2a4465;
+  --text-muted: #4f6b8e;
+  --text-subtle: #6d84a1;
+  --accent: #0a63d8;
+  --accent-hover: #0a53b7;
+  --accent-soft: #dbeaff;
+  --success: #187846;
+  --warning: #9f6200;
+  --danger: #af3434;
+  --panel-shadow: 0 20px 42px -28px rgba(14, 40, 78, 0.34);
+  --focus-ring: color-mix(in srgb, var(--accent) 42%, transparent);
+  --motion-fast: 150ms;
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 }
 
 /* ═══════════════════════════════════════════════════
@@ -82,6 +124,7 @@ html, body, #root { height: 100%; }
 body {
   margin: 0;
   font-family: var(--font-sans);
+<<<<<<< HEAD
   background: var(--color-canvas);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
@@ -109,6 +152,15 @@ body {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-panel);
+=======
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--accent) 16%, transparent) 0%, transparent 28%),
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--success) 10%, transparent) 0%, transparent 24%),
+    var(--bg-canvas);
+  color: var(--text-primary);
+  transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
+  line-height: 1.5;
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 }
 
 .cl-card {
@@ -118,6 +170,7 @@ body {
   border-radius: 0.75rem;
 }
 
+<<<<<<< HEAD
 /* ── Inputs ── */
 .cl-input {
   background: var(--color-surface-2);
@@ -445,6 +498,127 @@ body {
 
 .fade-in {
   animation: fade-in 300ms ease both;
+=======
+.surface-panel {
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+  box-shadow: var(--panel-shadow);
+}
+
+.surface-soft {
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface-2) 88%, transparent);
+}
+
+.brand-badge {
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.btn-primary {
+  border: 1px solid color-mix(in srgb, var(--accent) 64%, transparent);
+  background: var(--accent);
+  color: #fff;
+  transition: transform var(--motion-fast) ease, filter var(--motion-fast) ease, background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  filter: saturate(1.06);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-primary:disabled {
+  background: color-mix(in srgb, var(--accent) 55%, var(--bg-surface-2));
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.btn-secondary {
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  color: var(--text-secondary);
+}
+
+.btn-secondary:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.token-bg {
+  background-color: var(--bg-canvas);
+}
+
+.token-surface {
+  background-color: var(--bg-surface);
+}
+
+.token-surface-2 {
+  background-color: var(--bg-surface-2);
+}
+
+.token-border {
+  border-color: var(--border-subtle);
+}
+
+.token-text {
+  color: var(--text-primary);
+}
+
+.token-text-muted {
+  color: var(--text-muted);
+}
+
+.token-text-subtle {
+  color: var(--text-subtle);
+}
+
+:where(button, a, input, textarea, select, [role='button']) {
+  transition-property: color, background-color, border-color, box-shadow, transform;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: ease;
+}
+
+:where(button, a, input, textarea, select, [role='button']):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+:where(input, textarea, select) {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+:where(input, textarea, select):disabled {
+  background: var(--bg-surface-2);
+  color: var(--text-subtle);
+}
+
+.skeleton-block {
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--bg-surface-2) 20%, var(--bg-surface-3) 50%, var(--bg-surface-2) 80%);
+  background-size: 220% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-subtle) transparent;
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 }
 
 @keyframes fade-in {
@@ -538,6 +712,16 @@ body {
    REDUCED MOTION
 ═══════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
+<<<<<<< HEAD
   .app-enter, .fade-in, .pipeline-dot { animation: none; }
   body, .feature-card { transition: none; }
+=======
+  body {
+    transition: none;
+  }
+
+  :where(button, a, input, textarea, select, [role='button']) {
+    transition: none;
+  }
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 }

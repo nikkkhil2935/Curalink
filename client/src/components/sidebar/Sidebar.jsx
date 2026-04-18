@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+<<<<<<< HEAD
 import { BarChart2, MapPin, Tag, Clock, ChevronRight, Copy, Check } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore.js';
 import ThemeToggle from '../ui/ThemeToggle.jsx';
@@ -66,6 +67,18 @@ function PipelineDot({ active, label }) {
 
 export default function Sidebar() {
   const { currentSession, messages, sources, isLoading } = useAppStore();
+=======
+import { BarChart3, ChevronsLeft, ChevronsRight, NotebookText } from 'lucide-react';
+import { useAppStore } from '../../store/useAppStore.js';
+import SessionExportMenu from '@/components/features/SessionExportMenu.jsx';
+import BookmarksPanel from '@/components/features/BookmarksPanel.jsx';
+import Card from '../ui/Card.jsx';
+import Button from '@/components/ui/Button.jsx';
+import { cn } from '@/lib/utils.js';
+
+export default function Sidebar({ collapsed = false, onToggleCollapse }) {
+  const { currentSession, messages } = useAppStore();
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
   const navigate = useNavigate();
   const [copiedTrace, setCopiedTrace] = useState(false);
 
@@ -107,7 +120,39 @@ export default function Sidebar() {
     }
   };
 
+  if (collapsed) {
+    return (
+      <div className="flex h-full min-h-0 flex-col items-center justify-between p-2">
+        <div className="flex w-full flex-col items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label="Expand sidebar"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border token-border text-(--text-muted) hover:bg-(--bg-surface-2) hover:text-(--text-primary)"
+          >
+            <ChevronsRight className="h-4 w-4" aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/analytics')}
+            aria-label="Open analytics dashboard"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border token-border text-(--text-muted) hover:bg-(--bg-surface-2) hover:text-(--text-primary)"
+          >
+            <BarChart3 className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="w-full rounded-lg border token-border token-surface-2 p-2 text-center">
+          <p className="text-[11px] font-semibold token-text-muted">Msgs</p>
+          <p className="text-sm font-semibold token-text">{messages.length}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
+<<<<<<< HEAD
     <div
       className="flex flex-col h-full"
       style={{ background: 'var(--color-surface)', borderLeft: '1px solid var(--color-border)' }}
@@ -212,6 +257,46 @@ export default function Sidebar() {
                   <div className="flex items-center justify-between gap-2 py-1">
                     <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
                       Trace ID
+=======
+    <div className="flex h-full min-h-0 flex-col justify-between overflow-hidden p-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="inline-flex items-center gap-2 text-sm font-semibold token-text">
+          <NotebookText className="h-4 w-4 text-(--accent)" aria-hidden="true" />
+          Session Panel
+        </h2>
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          aria-label="Collapse sidebar"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border token-border text-(--text-muted) hover:bg-(--bg-surface-2) hover:text-(--text-primary)"
+        >
+          <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="scrollbar-thin flex-1 space-y-4 overflow-y-auto pr-1">
+        <Card tone="soft" padding="sm" className="space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-wider token-text-subtle">Session Info</h3>
+
+          <div className="space-y-2 text-sm token-text-muted">
+            {currentSession ? (
+              <>
+                <div className="flex justify-between gap-3">
+                  <span className="token-text-subtle">Disease</span>
+                  <span className="text-right font-semibold token-text">{currentSession.disease || 'N/A'}</span>
+                </div>
+                {currentSession.intent ? (
+                  <div className="flex justify-between gap-3">
+                    <span className="token-text-subtle">Intent</span>
+                    <span className="text-right font-semibold token-text">{currentSession.intent}</span>
+                  </div>
+                ) : null}
+                {currentSession.location?.city || currentSession.location?.country ? (
+                  <div className="flex justify-between gap-3">
+                    <span className="token-text-subtle">Location</span>
+                    <span className="text-right font-semibold token-text">
+                      {[currentSession.location.city, currentSession.location.country].filter(Boolean).join(', ')}
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
                     </span>
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span
@@ -236,6 +321,7 @@ export default function Sidebar() {
                       </button>
                     </div>
                   </div>
+<<<<<<< HEAD
                 </div>
               )}
 
@@ -317,6 +403,62 @@ export default function Sidebar() {
           <ChevronRight className="h-3 w-3" />
         </button>
         <ExportButton />
+=======
+                ) : null}
+              </>
+            ) : (
+              <span className="block text-center text-xs italic token-text-subtle">No active session</span>
+            )}
+          </div>
+        </Card>
+
+        {stats ? (
+          <Card tone="soft" padding="sm" className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider token-text-subtle">Retrieval Stats</h3>
+            <div className="space-y-2 text-sm token-text-muted">
+              <div className="flex justify-between text-(--accent)">
+                <span>Total Candidates</span>
+                <span className="font-semibold">{stats.totalCandidates || 0}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span>PubMed fetched</span>
+                <span>{stats.pubmedFetched || 0}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span>OpenAlex fetched</span>
+                <span>{stats.openalexFetched || 0}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span>ClinicalTrials fetched</span>
+                <span>{stats.ctFetched || 0}</span>
+              </div>
+              <div className="mt-2 flex justify-between text-(--warning)">
+                <span>Shown to You</span>
+                <span className="font-semibold">{stats.rerankedTo || 0}</span>
+              </div>
+              <div className="mt-2 flex justify-between border-t token-border pt-2 text-xs token-text-subtle">
+                <span>Retrieved in</span>
+                <span>{stats.timeTakenMs ? (stats.timeTakenMs / 1000).toFixed(1) + 's' : '0.0s'}</span>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
+        <BookmarksPanel />
+      </div>
+
+      <div className={cn('mt-4 w-full space-y-3 border-t token-border pt-4')}>
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => navigate('/analytics')}
+          aria-label="Open analytics dashboard"
+          className="w-full justify-center"
+        >
+          View Analytics Dashboard
+        </Button>
+        <SessionExportMenu />
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
       </div>
     </div>
   );

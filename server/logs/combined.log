@@ -1,0 +1,107 @@
+{"level":"error","message":"Port 5000 is already in use. Stop the existing process or set PORT.","timestamp":"2026-04-17T20:29:53.197Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T20:29:53.197Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T20:29:53.368Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T20:29:53.378Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T20:30:00.753Z"}
+{"level":"error","message":"Port 5000 is already in use. Stop the existing process or set PORT.","timestamp":"2026-04-17T20:30:00.805Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T20:30:00.927Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T20:30:00.945Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T20:30:08.251Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T20:30:08.416Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T20:55:55.298Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T20:55:59.925Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T20:56:13.404Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T20:56:17.500Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T20:57:41.300Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T20:57:41.527Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T20:59:30.030Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T20:59:30.193Z"}
+{"level":"info","message":"Server running on port 5050","timestamp":"2026-04-17T21:00:32.726Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:00:32.938Z"}
+{"level":"info","message":"Starting retrieval for query: \"latest evidence backed treatment options Parkinson's Disease\"","timestamp":"2026-04-17T21:00:45.405Z"}
+{"level":"info","message":"PubMed searching: \"(Parkinson's Disease) AND (latest OR evidence OR backed OR treatment OR options) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-17T21:00:45.405Z"}
+{"level":"info","message":"OpenAlex searching: \"latest evidence backed treatment options Parkinson's Disease\"","timestamp":"2026-04-17T21:00:45.411Z"}
+{"level":"info","message":"ClinicalTrials searching: \"Parkinson's Disease\"","timestamp":"2026-04-17T21:00:45.413Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1260ms","timestamp":"2026-04-17T21:00:46.673Z"}
+{"level":"info","message":"OpenAlex fetched 298 works in 10002ms","timestamp":"2026-04-17T21:00:55.413Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 14003ms","timestamp":"2026-04-17T21:00:59.408Z"}
+{"level":"warn","message":"Semantic reranking failed, using keyword scores","timestamp":"2026-04-17T21:00:59.433Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:12:14.640Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:12:14.809Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:12:17.694Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:12:17.885Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:13:01.191Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:13:01.986Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:24:17.040Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:24:17.256Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:24:22.221Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:24:22.411Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:24:28.839Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:24:29.012Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:24:31.366Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:24:31.541Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:25:54.490Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:25:54.680Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:33:15.995Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:33:16.176Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:33:22.243Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:33:22.428Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:49:01.080Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:49:01.233Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:49:17.578Z"}
+{"level":"error","message":"Port 5000 is already in use. Stop the existing process or set PORT.","timestamp":"2026-04-17T21:53:34.577Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:53:34.712Z"}
+{"level":"info","message":"Starting retrieval for query: \"this Heart Disease\"","timestamp":"2026-04-17T21:54:18.940Z"}
+{"level":"info","message":"PubMed searching: \"(Heart Disease) AND (this)\"","timestamp":"2026-04-17T21:54:18.943Z"}
+{"level":"info","message":"OpenAlex searching: \"this Heart Disease\"","timestamp":"2026-04-17T21:54:18.959Z"}
+{"level":"info","message":"ClinicalTrials searching: \"Heart Disease\"","timestamp":"2026-04-17T21:54:18.964Z"}
+{"level":"info","message":"PubMed fetched 0 articles in 727ms","timestamp":"2026-04-17T21:54:19.671Z"}
+{"level":"info","message":"ClinicalTrials fetched 100 studies in 1781ms","timestamp":"2026-04-17T21:54:20.745Z"}
+{"level":"info","message":"OpenAlex fetched 300 works in 8332ms","timestamp":"2026-04-17T21:54:27.291Z"}
+{"level":"info","message":"Starting retrieval for query: \"latest treatments lung cancer\"","timestamp":"2026-04-17T21:54:35.978Z"}
+{"level":"info","message":"PubMed searching: \"(lung cancer) AND (latest OR treatments) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-17T21:54:35.980Z"}
+{"level":"info","message":"OpenAlex searching: \"latest treatments lung cancer\"","timestamp":"2026-04-17T21:54:35.985Z"}
+{"level":"info","message":"ClinicalTrials searching: \"lung cancer\"","timestamp":"2026-04-17T21:54:35.992Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1324ms","timestamp":"2026-04-17T21:54:37.316Z"}
+{"level":"info","message":"OpenAlex fetched 300 works in 7382ms","timestamp":"2026-04-17T21:54:43.367Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 11148ms","timestamp":"2026-04-17T21:54:47.128Z"}
+{"level":"warn","message":"Semantic reranking failed, using keyword scores","timestamp":"2026-04-17T21:55:17.160Z"}
+{"level":"info","message":"Starting retrieval for query: \"Can you focus on recruiting clinical trials near my location? Heart Disease\"","timestamp":"2026-04-17T21:55:17.434Z"}
+{"level":"info","message":"PubMed searching: \"(Can you focus on recruiting clinical trials near my location?) AND (Heart Disease)\"","timestamp":"2026-04-17T21:55:17.434Z"}
+{"level":"info","message":"OpenAlex searching: \"Can you focus on recruiting clinical trials near my location? Heart Disease\"","timestamp":"2026-04-17T21:55:17.436Z"}
+{"level":"info","message":"ClinicalTrials searching: \"Heart Disease\"","timestamp":"2026-04-17T21:55:17.438Z"}
+{"level":"info","message":"PubMed fetched 0 articles in 875ms","timestamp":"2026-04-17T21:55:18.309Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1237ms","timestamp":"2026-04-17T21:55:18.675Z"}
+{"level":"info","message":"OpenAlex fetched 300 works in 5053ms","timestamp":"2026-04-17T21:55:22.489Z"}
+{"level":"warn","message":"Semantic reranking failed, using keyword scores","timestamp":"2026-04-17T21:55:52.500Z"}
+{"level":"info","message":"Starting retrieval for query: \"give current options asthma\"","timestamp":"2026-04-17T21:56:34.217Z"}
+{"level":"info","message":"PubMed searching: \"(asthma) AND (give OR current OR options) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-17T21:56:34.219Z"}
+{"level":"info","message":"OpenAlex searching: \"give current options asthma\"","timestamp":"2026-04-17T21:56:34.221Z"}
+{"level":"info","message":"ClinicalTrials searching: \"asthma\"","timestamp":"2026-04-17T21:56:34.223Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1251ms","timestamp":"2026-04-17T21:56:35.474Z"}
+{"level":"info","message":"OpenAlex fetched 299 works in 7150ms","timestamp":"2026-04-17T21:56:41.371Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 8180ms","timestamp":"2026-04-17T21:56:42.399Z"}
+{"level":"warn","message":"Semantic reranking failed, using keyword scores","timestamp":"2026-04-17T21:57:12.418Z"}
+{"level":"error","message":"Port 5000 is already in use. Stop the existing process or set PORT.","timestamp":"2026-04-17T21:59:55.746Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T21:59:55.737Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:59:55.890Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T21:59:55.919Z"}
+{"level":"info","message":"Server running on port 5051","timestamp":"2026-04-17T22:00:02.665Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T22:00:02.815Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T22:00:50.620Z"}
+{"level":"error","message":"Port 5000 is already in use. Stop the existing process or set PORT.","timestamp":"2026-04-17T22:00:50.675Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T22:00:50.779Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T22:00:50.811Z"}
+{"level":"error","message":"Port 5000 is already in use. Stop the existing process or set PORT.","timestamp":"2026-04-17T22:00:56.319Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T22:00:56.467Z"}
+{"level":"info","message":"Server running on port 5010","timestamp":"2026-04-17T22:04:37.108Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T22:04:37.252Z"}
+{"level":"info","message":"Starting retrieval for query: \"latest treatment options asthma\"","timestamp":"2026-04-17T22:04:38.293Z"}
+{"level":"info","message":"PubMed searching: \"(asthma) AND (latest OR treatment OR options) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-17T22:04:38.294Z"}
+{"level":"info","message":"OpenAlex searching: \"latest treatment options asthma\"","timestamp":"2026-04-17T22:04:38.299Z"}
+{"level":"info","message":"ClinicalTrials searching: \"asthma\"","timestamp":"2026-04-17T22:04:38.301Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1249ms","timestamp":"2026-04-17T22:04:39.549Z"}
+{"level":"info","message":"OpenAlex fetched 298 works in 8562ms","timestamp":"2026-04-17T22:04:46.861Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 8911ms","timestamp":"2026-04-17T22:04:47.205Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T22:17:03.583Z"}
+{"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T22:17:03.736Z"}

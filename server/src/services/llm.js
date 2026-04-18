@@ -1,4 +1,5 @@
 import axios from 'axios';
+<<<<<<< HEAD
 import http from 'node:http';
 import https from 'node:https';
 import logger from '../lib/logger.js';
@@ -19,10 +20,32 @@ const httpsAgent = new https.Agent({
   keepAlive: true,
   maxSockets: KEEP_ALIVE_MAX_SOCKETS,
   maxFreeSockets: KEEP_ALIVE_MAX_FREE_SOCKETS
+=======
+import { Agent as HttpAgent } from 'node:http';
+import { Agent as HttpsAgent } from 'node:https';
+
+const LLM_SERVICE_URL = process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001';
+const LLM_KEEP_ALIVE_MS = Number.parseInt(process.env.LLM_KEEP_ALIVE_MS || '30000', 10);
+const LLM_MAX_SOCKETS = Number.parseInt(process.env.LLM_MAX_SOCKETS || '50', 10);
+
+const llmHttpAgent = new HttpAgent({
+  keepAlive: true,
+  keepAliveMsecs: LLM_KEEP_ALIVE_MS,
+  maxSockets: LLM_MAX_SOCKETS,
+  maxFreeSockets: 10
+});
+
+const llmHttpsAgent = new HttpsAgent({
+  keepAlive: true,
+  keepAliveMsecs: LLM_KEEP_ALIVE_MS,
+  maxSockets: LLM_MAX_SOCKETS,
+  maxFreeSockets: 10
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 });
 
 const llmClient = axios.create({
   baseURL: LLM_SERVICE_URL,
+<<<<<<< HEAD
   timeout: LLM_TIMEOUT_MS,
   httpAgent,
   httpsAgent,
@@ -30,6 +53,42 @@ const llmClient = axios.create({
     Connection: 'keep-alive'
   }
 });
+=======
+  timeout: 120000,
+  httpAgent: llmHttpAgent,
+  httpsAgent: llmHttpsAgent
+});
+
+function normalizeSuggestions(items, limit = 5) {
+  const max = Math.max(3, Math.min(5, Number(limit) || 5));
+  const normalized = (Array.isArray(items) ? items : [])
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.indexOf(value) === index);
+
+  return normalized.slice(0, max);
+}
+
+export async function generateSmartSuggestions({ partialQuery, history, commonTopics, limit = 5 }) {
+  const query = String(partialQuery || '').trim();
+  if (!query) {
+    return [];
+  }
+
+  const { data } = await llmClient.post(
+    '/suggestions',
+    {
+      partial_query: query,
+      history: Array.isArray(history) ? history : [],
+      common_topics: Array.isArray(commonTopics) ? commonTopics : [],
+      limit: Math.max(3, Math.min(5, Number(limit) || 5))
+    },
+    { timeout: 15000 }
+  );
+
+  return normalizeSuggestions(data?.suggestions, limit);
+}
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
 /**
  * Call LLM service for RAG generation.
@@ -62,7 +121,11 @@ export async function callLLM(systemPrompt, userPrompt) {
  */
 export async function getEmbeddings(texts) {
   try {
+<<<<<<< HEAD
     const { data } = await llmClient.post('/embed', { texts }, { timeout: EMBED_TIMEOUT_MS });
+=======
+    const { data } = await llmClient.post('/embed', { texts }, { timeout: 30000 });
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     return data.embeddings;
   } catch (err) {
     logger.warn('Embedding service unavailable, falling back to keyword scoring');
@@ -114,15 +177,26 @@ export async function semanticRerank(query, documents) {
  * Parse and validate LLM response with resilient fallback behavior.
  */
 export function parseLLMResponse(llmData, options = {}) {
+<<<<<<< HEAD
   const allowedCitationIds = normalizeAllowedCitationIds(options.allowedCitationIds);
 
   if (llmData?.parsed !== null && llmData?.parsed !== undefined) {
     const normalized = normalizeStructuredAnswer(llmData.parsed, allowedCitationIds);
+=======
+  const allowedCitationIds = Array.isArray(options.allowedCitationIds)
+    ? options.allowedCitationIds.map((id) => String(id).toUpperCase())
+    : [];
+  const contextDocs = Array.isArray(options.contextDocs) ? options.contextDocs : [];
+
+  if (llmData?.parsed) {
+    const normalized = normalizeStructuredAnswer(llmData.parsed, allowedCitationIds, contextDocs);
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     if (isValidStructuredAnswer(normalized)) {
       return normalized;
     }
   }
 
+<<<<<<< HEAD
   if (typeof llmData?.text === 'string') {
     const cleanedText = stripMarkdownCodeFences(llmData.text).trim();
     const parsedFromCleanText = tryParseJson(cleanedText);
@@ -139,6 +213,13 @@ export function parseLLMResponse(llmData, options = {}) {
       if (isValidStructuredAnswer(normalized)) {
         return normalized;
       }
+=======
+  const parsedFromText = extractJsonPayload(llmData?.text || '');
+  if (parsedFromText) {
+    const normalized = normalizeStructuredAnswer(parsedFromText, allowedCitationIds, contextDocs);
+    if (isValidStructuredAnswer(normalized)) {
+      return normalized;
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     }
   }
 
@@ -194,7 +275,14 @@ function createParserFallback(options = {}, allowedCitationIds = []) {
     ? options.evidenceStrengthLabel
     : 'LIMITED';
   const disease = options.disease || 'this condition';
+<<<<<<< HEAD
   const contextDocs = Array.isArray(options.contextDocs) ? options.contextDocs : [];
+=======
+  const fallbackBreakdown = buildDefaultConfidenceBreakdown(
+    options.allowedCitationIds,
+    options.contextDocs
+  );
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
   const publicationCitations = allowedCitationIds.filter((id) => /^P\d+$/.test(id));
   const trialCitations = allowedCitationIds.filter((id) => /^T\d+$/.test(id));
@@ -249,8 +337,14 @@ function createParserFallback(options = {}, allowedCitationIds = []) {
       'Can you summarize the strongest findings from the listed sources?',
       'Can you focus on recruiting clinical trials near my location?',
       'Can you compare benefits and risks from the top studies?'
+<<<<<<< HEAD
     ]
   }, allowedCitationIds);
+=======
+    ],
+    confidence_breakdown: fallbackBreakdown
+  };
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 }
 
 function isValidStructuredAnswer(obj) {
@@ -261,6 +355,7 @@ function isValidStructuredAnswer(obj) {
     obj.condition_overview.trim().length > 0 &&
     Array.isArray(obj.research_insights) &&
     Array.isArray(obj.clinical_trials) &&
+<<<<<<< HEAD
     typeof obj.recommendations === 'string' &&
     Array.isArray(obj.follow_up_suggestions) &&
     obj.follow_up_suggestions.length === 3
@@ -269,6 +364,59 @@ function isValidStructuredAnswer(obj) {
 
 function normalizeStructuredAnswer(answer, allowedCitationIds = []) {
   const safeAnswer = answer && typeof answer === 'object' ? answer : {};
+=======
+    Array.isArray(obj.follow_up_suggestions) &&
+    Array.isArray(obj.confidence_breakdown)
+  );
+}
+
+function normalizeScore(value, fallback = 0.5) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.min(1, numeric));
+}
+
+function getDocForCitation(citationId, contextDocs = []) {
+  const match = String(citationId || '').match(/^([PT])(\d+)$/i);
+  if (!match) {
+    return null;
+  }
+
+  const bucket = match[1].toUpperCase() === 'P' ? 'publication' : 'trial';
+  const index = Math.max(0, Number(match[2]) - 1);
+  const docs = (Array.isArray(contextDocs) ? contextDocs : []).filter((doc) => doc.type === bucket);
+
+  return docs[index] || null;
+}
+
+function buildDefaultConfidenceBreakdown(allowedCitationIds = [], contextDocs = []) {
+  return (Array.isArray(allowedCitationIds) ? allowedCitationIds : []).map((citationId) => {
+    const normalizedCitation = String(citationId || '').toUpperCase();
+    const doc = getDocForCitation(normalizedCitation, contextDocs);
+    const relevance = normalizeScore(doc?.relevanceScore ?? doc?.lastRelevanceScore ?? doc?.finalScore, 0.5);
+    const credibility = normalizeScore(doc?.sourceCredibility, 0.7);
+    const recency = normalizeScore(doc?.recencyScore, 0.5);
+    const composite = normalizeScore(
+      doc?.finalScore,
+      relevance * 0.45 + credibility * 0.25 + recency * 0.3
+    );
+
+    return {
+      source_id: normalizedCitation,
+      title: String(doc?.title || normalizedCitation),
+      relevance_score: relevance,
+      credibility_score: credibility,
+      recency_score: recency,
+      composite_score: composite
+    };
+  });
+}
+
+function normalizeStructuredAnswer(answer, allowedCitationIds = [], contextDocs = []) {
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
   const allowedSet = new Set(
     normalizeAllowedCitationIds(allowedCitationIds)
   );
@@ -334,6 +482,50 @@ function normalizeStructuredAnswer(answer, allowedCitationIds = []) {
       : `${baseRecommendations.replace(/\.+$/, '')}. ${providerSuffix}`
     : `Based on the retrieved research, please review the listed sources. ${providerSuffix}`;
 
+  const confidenceBreakdownMap = new Map();
+  if (Array.isArray(answer.confidence_breakdown)) {
+    answer.confidence_breakdown.forEach((entry) => {
+      const sourceId = String(entry?.source_id || '').toUpperCase().trim();
+      if (!sourceId) {
+        return;
+      }
+
+      if (allowedSet.size && !allowedSet.has(sourceId)) {
+        return;
+      }
+
+      if (confidenceBreakdownMap.has(sourceId)) {
+        return;
+      }
+
+      const doc = getDocForCitation(sourceId, contextDocs);
+      const relevance = normalizeScore(entry?.relevance_score ?? doc?.relevanceScore, 0.5);
+      const credibility = normalizeScore(entry?.credibility_score ?? doc?.sourceCredibility, 0.7);
+      const recency = normalizeScore(entry?.recency_score ?? doc?.recencyScore, 0.5);
+      const composite = normalizeScore(
+        entry?.composite_score ?? doc?.finalScore,
+        relevance * 0.45 + credibility * 0.25 + recency * 0.3
+      );
+
+      confidenceBreakdownMap.set(sourceId, {
+        source_id: sourceId,
+        title: String(entry?.title || doc?.title || sourceId),
+        relevance_score: relevance,
+        credibility_score: credibility,
+        recency_score: recency,
+        composite_score: composite
+      });
+    });
+  }
+
+  if (allowedSet.size) {
+    buildDefaultConfidenceBreakdown(Array.from(allowedSet), contextDocs).forEach((entry) => {
+      if (!confidenceBreakdownMap.has(entry.source_id)) {
+        confidenceBreakdownMap.set(entry.source_id, entry);
+      }
+    });
+  }
+
   return {
     condition_overview:
       String(safeAnswer.condition_overview || '').trim() || 'Evidence not available in current research pool.',
@@ -348,7 +540,8 @@ function normalizeStructuredAnswer(answer, allowedCitationIds = []) {
           .filter(Boolean)
       : [],
     recommendations,
-    follow_up_suggestions: followUpSuggestions
+    follow_up_suggestions: followUpSuggestions,
+    confidence_breakdown: Array.from(confidenceBreakdownMap.values())
   };
 }
 

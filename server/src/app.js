@@ -1,13 +1,15 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, join } from 'node:path';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import compression from 'compression';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 
-import sessionRoutes from './routes/sessions.js';
+import sessionRoutes, { bookmarksRouter } from './routes/sessions.js';
 import queryRoutes from './routes/query.js';
 import analyticsRoutes from './routes/analytics.js';
 import exportRoutes from './routes/export.js';
@@ -15,22 +17,39 @@ import { startAnalyticsScheduler, stopAnalyticsScheduler } from './services/sche
 import logger from './lib/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load server/.env even when the process is started from the workspace root.
+const dotenvResult = dotenv.config({ path: join(__dirname, '..', '.env') });
+if (process.env.NODE_ENV !== 'production' && dotenvResult.parsed) {
+  // Keep local Mongo URIs stable even when stale shell variables are set.
+  for (const key of ['MONGODB_URI', 'MONGODB_URI_FALLBACK']) {
+    const value = dotenvResult.parsed[key];
+    if (value) {
+      process.env[key] = value;
+    }
+  }
+}
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
+const APP_VERSION = process.env.APP_VERSION || process.env.npm_package_version || '1.0.0';
 const configuredOrigins = (process.env.FRONTEND_URL || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 const allowWildcardCors = !isProduction && configuredOrigins.length === 0;
+<<<<<<< HEAD
 
 let mongoLastError = null;
 let mongoRetryHandle = null;
 let mongoMode = 'disconnected';
 let memoryServer = null;
+=======
+let mongoLastError = null;
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
-const mongoRetryMs = Number.parseInt(process.env.MONGODB_RETRY_MS || '15000', 10);
 const mongoOptions = {
   serverSelectionTimeoutMS: Number.parseInt(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || '5000', 10),
   connectTimeoutMS: Number.parseInt(process.env.MONGODB_CONNECT_TIMEOUT_MS || '10000', 10),
@@ -61,6 +80,7 @@ app.use(
     }
   })
 );
+app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
@@ -86,6 +106,16 @@ app.use('/api/sessions/:id/query', queryLimiter);
 mongoose.set('bufferCommands', false);
 
 function sanitizeMongoUri(uri) {
+  if (uri.startsWith('mongodb://') || uri.startsWith('mongodb+srv://')) {
+    const protocol = uri.startsWith('mongodb+srv://') ? 'mongodb+srv' : 'mongodb';
+    const withoutProtocol = uri.replace(/^mongodb(\+srv)?:\/\//, '');
+    const afterCredentials = withoutProtocol.includes('@')
+      ? withoutProtocol.slice(withoutProtocol.indexOf('@') + 1)
+      : withoutProtocol;
+    const hostSegment = afterCredentials.split('/')[0] || '<unknown-host>';
+    return `${protocol}://${hostSegment}`;
+  }
+
   try {
     const parsed = new URL(uri);
     return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
@@ -94,6 +124,7 @@ function sanitizeMongoUri(uri) {
   }
 }
 
+<<<<<<< HEAD
 function getMongoCandidates() {
   const candidates = [];
   const seenUris = new Set();
@@ -199,28 +230,71 @@ async function bootstrapMongoConnection() {
   scheduleMongoReconnect();
 }
 
+=======
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 mongoose.connection.on('error', (err) => {
   mongoLastError = err.message;
-  scheduleMongoReconnect();
 });
 
 mongoose.connection.on('disconnected', () => {
-  mongoMode = 'disconnected';
-  scheduleMongoReconnect();
+  mongoLastError = 'MongoDB Atlas disconnected';
 });
 
 mongoose.connection.on('connected', () => {
   mongoLastError = null;
-  if (mongoRetryHandle) {
-    clearTimeout(mongoRetryHandle);
-    mongoRetryHandle = null;
-  }
 });
 
-bootstrapMongoConnection().catch((err) => {
-  mongoLastError = err.message;
-  scheduleMongoReconnect();
-});
+async function connectMongoAtlasStrict() {
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+
+  const primaryUri = String(process.env.MONGODB_URI || '').trim();
+  const fallbackUri = String(process.env.MONGODB_URI_FALLBACK || '').trim();
+  const candidates = [];
+
+  if (primaryUri) {
+    candidates.push({ name: 'MONGODB_URI', uri: primaryUri, requireSrv: true });
+  }
+
+  if (fallbackUri && fallbackUri !== primaryUri) {
+    candidates.push({ name: 'MONGODB_URI_FALLBACK', uri: fallbackUri, requireSrv: false });
+  }
+
+  if (!candidates.length) {
+    throw new Error('MONGODB_URI is required and must point to MongoDB Atlas.');
+  }
+
+  const connectionErrors = [];
+
+  for (const candidate of candidates) {
+    const { name, uri, requireSrv } = candidate;
+    if (!(uri.startsWith('mongodb+srv://') || uri.startsWith('mongodb://'))) {
+      connectionErrors.push(`${name}: URI must start with "mongodb+srv://" or "mongodb://".`);
+      continue;
+    }
+
+    if (requireSrv && !uri.startsWith('mongodb+srv://')) {
+      connectionErrors.push(`${name}: must be an Atlas SRV URI and start with "mongodb+srv://".`);
+      continue;
+    }
+
+    try {
+      await mongoose.connect(uri, mongoOptions);
+      mongoLastError = null;
+      console.log(`MongoDB Atlas connected via ${name} (${sanitizeMongoUri(uri)})`);
+      return;
+    } catch (err) {
+      const message = err?.message || 'Unknown MongoDB connection error';
+      connectionErrors.push(`${name} (${sanitizeMongoUri(uri)}): ${message}`);
+      await mongoose.disconnect().catch(() => {});
+    }
+  }
+
+  const reason = connectionErrors.join(' | ');
+  mongoLastError = reason;
+  throw new Error(`Failed to connect to MongoDB Atlas. Attempted ${candidates.length} URI(s): ${reason}`);
+}
 
 app.use('/api', (req, res, next) => {
   if (req.path === '/health') {
@@ -229,7 +303,11 @@ app.use('/api', (req, res, next) => {
 
   if (mongoose.connection.readyState !== 1) {
     return res.status(503).json({
+<<<<<<< HEAD
       error: `Database is unavailable. Verify database connectivity and retry.`
+=======
+      error: 'Database is unavailable (Atlas disconnected). Verify MONGODB_URI connectivity and retry.'
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     });
   }
 
@@ -237,61 +315,91 @@ app.use('/api', (req, res, next) => {
 });
 
 app.use('/api/sessions', sessionRoutes);
+app.use('/api/sessions', exportRoutes);
+app.use('/api', bookmarksRouter);
 app.use('/api', queryRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/export', exportRoutes);
 
+<<<<<<< HEAD
 async function healthHandler(req, res) {
+=======
+function normalizeServiceStatus(value, fallback = 'offline') {
+  const normalized = String(value || '').trim().toLowerCase();
+
+  if (normalized === 'ok' || normalized === 'online' || normalized === 'connected') {
+    return 'online';
+  }
+
+  if (normalized === 'degraded') {
+    return 'degraded';
+  }
+
+  if (normalized === 'offline' || normalized === 'disconnected' || normalized === 'error') {
+    return 'offline';
+  }
+
+  return fallback;
+}
+
+async function getLlmServiceStatus() {
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
   const llmServiceUrl = process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001';
-  let llmStatus = 'offline';
-  let llmProvider = null;
-  let llmQuality = 'offline';
 
   try {
     const response = await fetch(`${llmServiceUrl}/health`);
-    if (response.ok) {
-      const health = await response.json().catch(() => null);
-      const providers = health?.providers || {};
-      const ollamaOnline = providers?.ollama?.status === 'online';
-      const ollamaModelAvailable = providers?.ollama?.model_available !== false;
-      const groqConfigured = Boolean(providers?.groq?.configured);
-      const localAvailable = Boolean(providers?.local?.available);
-      const effectiveProvider = typeof health?.effective_generation_provider === 'string'
-        ? health.effective_generation_provider
-        : null;
-
-      const hasFullProvider = (ollamaOnline && ollamaModelAvailable) || groqConfigured;
-
-      // Service health should reflect currently available full providers, not only the last used provider.
-      if (hasFullProvider) {
-        llmStatus = 'online';
-        llmQuality = 'full';
-
-        if (effectiveProvider === 'ollama' && ollamaOnline && ollamaModelAvailable) {
-          llmProvider = 'ollama';
-        } else if (effectiveProvider === 'groq' && groqConfigured) {
-          llmProvider = 'groq';
-        } else if (ollamaOnline && ollamaModelAvailable) {
-          llmProvider = 'ollama';
-        } else {
-          llmProvider = 'groq';
-        }
-      } else if (localAvailable) {
-        llmProvider = 'local';
-        llmQuality = 'degraded';
-        llmStatus = 'degraded';
-      } else if (health?.status === 'ok') {
-        llmStatus = 'degraded';
-        llmQuality = 'degraded';
-      }
+    if (!response.ok) {
+      return 'offline';
     }
+
+    const health = await response.json().catch(() => null);
+
+    if (health?.services?.llm) {
+      return normalizeServiceStatus(health.services.llm, 'degraded');
+    }
+
+    if (health?.status) {
+      return normalizeServiceStatus(health.status, 'degraded');
+    }
+
+    return 'degraded';
   } catch (error) {
-    llmStatus = 'offline';
-    llmQuality = 'offline';
+    return 'offline';
+  }
+}
+
+function buildHealthPayload(dbStatus, llmStatus) {
+  const apiStatus = dbStatus === 'connected' ? 'online' : 'degraded';
+  return {
+    status: dbStatus === 'connected' && llmStatus === 'online' ? 'ok' : 'degraded',
+    version: APP_VERSION,
+    uptime_ms: Math.round(process.uptime() * 1000),
+    api: apiStatus,
+    llm: llmStatus,
+    db: dbStatus,
+    services: {
+      api: apiStatus,
+      llm: llmStatus,
+      db: dbStatus
+    },
+    ...(mongoLastError ? { db_error: mongoLastError } : {}),
+    timestamp: new Date().toISOString()
+  };
+}
+
+async function healthHandler(req, res) {
+  const dbConnected = mongoose.connection.readyState === 1;
+  const dbStatus = dbConnected ? 'connected' : 'disconnected';
+  const llmStatus = await getLlmServiceStatus();
+  const payload = buildHealthPayload(dbStatus, llmStatus);
+
+  if (!dbConnected) {
+    return res.status(503).json(payload);
   }
 
-  const apiStatus = mongoose.connection.readyState === 1 && llmStatus !== 'offline' ? 'ok' : 'degraded';
+  return res.status(200).json(payload);
+}
 
+<<<<<<< HEAD
   return res.json({
     status: apiStatus,
     mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
@@ -306,6 +414,10 @@ async function healthHandler(req, res) {
 
 app.get('/api/health', healthHandler);
 app.get('/health', healthHandler);
+=======
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
+>>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
 async function shutdown() {
   stopAnalyticsScheduler();
@@ -317,15 +429,8 @@ async function shutdown() {
     httpServer = null;
   }
 
-  if (mongoRetryHandle) {
-    clearTimeout(mongoRetryHandle);
-    mongoRetryHandle = null;
-  }
-
-  if (memoryServer) {
+  if (mongoose.connection.readyState !== 0) {
     await mongoose.disconnect().catch(() => {});
-    await memoryServer.stop().catch(() => {});
-    memoryServer = null;
   }
 }
 
@@ -346,10 +451,12 @@ function isDirectExecution() {
   return Boolean(process.argv?.[1]) && pathToFileURL(process.argv[1]).href === import.meta.url;
 }
 
-export function startServer(port = PORT) {
+export async function startServer(port = PORT) {
   if (httpServer) {
     return httpServer;
   }
+
+  await connectMongoAtlasStrict();
 
   httpServer = app.listen(port, () => {
     logger.info(`Server running on port ${port}`);
@@ -369,7 +476,10 @@ export function startServer(port = PORT) {
 }
 
 if (isDirectExecution()) {
-  startServer(PORT);
+  startServer(PORT).catch((err) => {
+    console.error(`Server startup failed: ${err?.message || err}`);
+    process.exit(1);
+  });
 }
 
 export default app;

@@ -1,189 +1,336 @@
 # Curalink
 
-AI-powered medical research assistant focused on evidence-first responses.
+AI-powered medical research assistant built for evidence-grounded clinical exploration.
 
-## What Makes Curalink Unique
+## What Curalink does
 
-- Deep retrieval across PubMed, OpenAlex, and ClinicalTrials.gov
-- Hybrid ranking pipeline (keyword + semantic + recency + location)
-- Structured RAG output with source-linked evidence
-- Timeline, researcher spotlight, and trial-centric evidence views
-- PDF export for sharable research briefs
-- Analytics dashboard for usage, intent, and source insights
+Curalink helps users ask disease-focused medical questions, then:
 
-## Reliability And UX Upgrades
+1. retrieves research candidates from PubMed, OpenAlex, and ClinicalTrials.gov,
+2. ranks and normalizes those sources,
+3. generates a structured, citation-aware answer,
+4. presents evidence, trials, timeline/researcher insights, bookmarks, export, and analytics.
 
-- Message-scoped evidence alignment: selecting an assistant answer now binds the evidence panel and export flow to that exact turn.
-- Retrieval hardening: no-evidence queries return deterministic grounded fallbacks instead of unconstrained generation.
-- Trial preservation in ranking: clinical trial evidence is retained through semantic reranking and context selection.
-- Scheduled analytics snapshots: background scheduler records hourly growth snapshots exposed in dashboard trends.
-- UI primitives upgraded with shadcn-style patterns (`class-variance-authority`, `clsx`, `tailwind-merge`) and motion-enhanced visuals (`framer-motion`).
+The main product value is traceability: answers are tied to source citations rather than free-form model-only output.
 
-## Architecture
+## High-level architecture
 
 ```text
-React (Vite)
-  -> Express API (Node.js)
-      -> Retrieval adapters (PubMed, OpenAlex, ClinicalTrials)
-      -> Ranking + context packaging
-      -> FastAPI LLM service
-      -> MongoDB (sessions, messages, source docs, analytics)
+React/Vite client
+  -> Express API server (sessions, retrieval pipeline, analytics, export)
+      -> FastAPI LLM service (generate/embed/rerank/suggestions)
+          -> External data APIs (PubMed/OpenAlex/ClinicalTrials)
+          -> MongoDB Atlas (sessions/messages/sources/analytics)
 ```
 
-## Stack
+## Repository layout
 
-- Frontend: React 18, Vite, Tailwind CSS, Recharts, Zustand
-- Backend: Node.js, Express, Mongoose
-- LLM service: FastAPI, SentenceTransformers, Ollama-compatible generation
-- Database: MongoDB
-- Deployment targets: Vercel (frontend), Railway (backend), Render (LLM)
+```text
+client/        Frontend React app (chat, evidence panel, analytics)
+server/        Backend Express app + Mongo models + retrieval pipeline
+llm-service/   Python FastAPI service for generation/embedding/rerank
+scripts/       Operational scripts (context refresh, smoke, latency bench)
+```
 
-## Retrieval and Generation Pipeline
+## Product capabilities
 
-1. Intent classification
-2. Query expansion
-3. Parallel retrieval from 3 sources
-4. Normalization and deduplication
-5. Hybrid reranking
-6. Context packaging with citation index
-7. LLM structured synthesis
-8. Evidence-first response rendering
+- Multi-source retrieval from PubMed/OpenAlex/ClinicalTrials.gov
+- Intent-aware query orchestration
+- Structured RAG answers with source IDs
+- Evidence tabs: Publications, Trials, Researchers, Timeline
+- Session lifecycle + history search
+- Bookmarks
+- Session export (JSON/CSV/PDF)
+- Analytics dashboard and snapshots
 
-## Local Setup
+## Tech stack
 
-### 1) LLM service
+### Frontend
+- React 18
+- Vite
+- Tailwind CSS v4
+- Recharts
+- Zustand
+
+### Backend
+- Node.js + Express
+- Mongoose
+- Axios
+
+### LLM service
+- FastAPI
+- sentence-transformers
+- transformers + torch
+- Groq primary provider with local fallback modes
+
+## Prerequisites
+
+- Node.js >= 20
+- Python >= 3.11
+- MongoDB Atlas connection details
+- (Recommended) dedicated virtual environment at `.venv`
+
+## Install
 
 ```bash
+npm install
+npm --prefix client install
+npm --prefix server install
+pip install -r llm-service/requirements.txt
+```
+
+## Quick start
+
+```bash
+npm run start:all
+```
+
+`start:all` launches all services and wires backend `LLM_SERVICE_URL` to the selected LLM port.
+
+## Manual startup (3 terminals)
+
+### Terminal 1: LLM service
+
+```powershell
 cd llm-service
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8001
+$env:GROQ_API_KEY="<your-key>"
+$env:PRIMARY_LLM_PROVIDER="groq"
+python -m uvicorn main:app --app-dir . --host 127.0.0.1 --port 8001
 ```
 
-### 2) Backend
+### Terminal 2: Backend
 
-```bash
+```powershell
 cd server
-npm install
-cp .env.example .env
+$env:LLM_SERVICE_URL="http://127.0.0.1:8001"
 npm run dev
 ```
 
-### 3) Frontend
+### Terminal 3: Frontend
 
-```bash
+```powershell
 cd client
-npm install
-npm run dev
+npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
-Optional local quality checks:
+Service URLs:
 
-```bash
-cd client
-npm run check
+- Frontend: http://localhost:5173
+- Backend: http://127.0.0.1:5000
+- LLM service: http://127.0.0.1:8001
 
-cd ../server
-npm run check
-```
+## Route map
 
-Workspace-wide context + health checks:
+- `/` landing page
+- `/app` landing route alias
+- `/research/:sessionId` research workspace
+- `/analytics` analytics dashboard
 
-```bash
-cd ..
-npm run context:refresh
-npm run doctor
-```
+## Environment variables
 
-- `npm run context:refresh` regenerates `PROJECT_CONTEXT.md` and `PROJECT_CONTEXT.json` from the current codebase.
-- `npm run check:integration` starts isolated local LLM + backend instances, runs a live session/query smoke test, verifies structured answer + sources, then shuts services down.
-- `npm run doctor` refreshes context, runs static checks, then runs `check:integration`.
+### Backend (`server/.env`)
 
-Optional 21st.dev MCP tooling (from `client`):
+Required/critical:
 
-```bash
-npm run 21st:setup
-npm run magic:mcp
-```
+- `MONGODB_URI` primary Atlas URI
+- `LLM_SERVICE_URL` URL of FastAPI service
+- `FRONTEND_URL` allowed origin for CORS
+- `PORT` backend port
 
-### Local Troubleshooting
+Recommended:
 
-- If MongoDB Atlas SRV resolution fails on Windows, use a non-SRV URI with explicit shard hosts instead of `mongodb+srv://`.
-- If your MongoDB password contains special characters (for example `@`), URL-encode them (for example `%40`).
-- Local port `8000` may already be in use in some environments; keep `LLM_SERVICE_URL` on `http://127.0.0.1:8001` and run the LLM service on port `8001`.
-- Backend now tries `MONGODB_URI`, then `MONGODB_URI_FALLBACK`, then optional local fallback (`MONGODB_URI_LOCAL`) when `MONGODB_ALLOW_LOCAL_FALLBACK=true`.
-- In-memory Mongo fallback is intended for local development only and should be enabled explicitly via `MONGODB_MEMORY_FALLBACK=true`.
-- LLM service now supports a local continuity fallback for `/generate`, `/embed`, and `/rerank` when Ollama/Groq/torch are unavailable.
-- Frontend dev proxy can be changed with `VITE_DEV_API_PROXY` (default `http://localhost:5000`).
-- Backend health now reports `llmQuality` so local fallback mode is visible (`full` vs `degraded`).
-- Backend analytics scheduler is controlled by:
-  - `ANALYTICS_SCHEDULER_ENABLED` (`true` by default)
-  - `ANALYTICS_SNAPSHOT_CRON` (default hourly: `0 * * * *`)
+- `MONGODB_URI_FALLBACK` explicit-host Mongo URI for SRV DNS fallback on some Windows environments
+- `APP_VERSION`
+- `PUBMED_EMAIL`
 
-## Production Environment Variables
+Tuning:
 
-### Backend (Railway)
+- `MONGODB_SERVER_SELECTION_TIMEOUT_MS`
+- `MONGODB_CONNECT_TIMEOUT_MS`
+- `MONGODB_SOCKET_TIMEOUT_MS`
+- `MONGODB_MAX_POOL_SIZE`
+- `MONGODB_MIN_POOL_SIZE`
+- `MONGODB_MAX_IDLE_MS`
+- `QUERY_CACHE_TTL_MS`
+- `QUERY_CACHE_MAX_ENTRIES`
+- `LLM_KEEP_ALIVE_MS`
+- `LLM_MAX_SOCKETS`
 
-- `MONGODB_URI`
-- `LLM_SERVICE_URL`
-- `FRONTEND_URL`
-- `PORT`
-- `NODE_ENV`
+Scheduler:
 
-### LLM service (Render)
+- `ANALYTICS_SCHEDULER_ENABLED`
+- `ANALYTICS_SNAPSHOT_CRON`
 
-- `OLLAMA_URL` (if using Ollama endpoint)
+### LLM service
+
+- `PRIMARY_LLM_PROVIDER` (`groq` or `ollama`)
+- `GROQ_API_KEY`
+- `GROQ_MODEL`
+- `OLLAMA_URL`
 - `OLLAMA_MODEL`
-- `GROQ_API_KEY` (optional hosted fallback)
+- `OLLAMA_EMBED_MODEL`
+- `OLLAMA_EMBED_TIMEOUT_SEC`
+- `LOCAL_FALLBACK_ENABLED`
+- `FALLBACK_EMBED_DIM`
+- `USE_LANGGRAPH_WORKFLOW`
+- `SEMANTIC_CACHE_THRESHOLD`
+- `SEMANTIC_CACHE_MAX_SIZE`
 
-### Frontend (Vercel)
+### Frontend
 
-- `VITE_API_URL` (for example: `https://your-backend.railway.app/api`)
+- `VITE_APP_NAME`
+- `VITE_API_URL`
+- `VITE_DEV_API_PROXY` (used by dev proxy)
 
-## API Endpoints
+## API overview
 
 ### Sessions
 
 - `POST /api/sessions`
 - `GET /api/sessions`
 - `GET /api/sessions/:id`
-- `GET /api/sessions/:id/sources`
 - `DELETE /api/sessions/:id`
-
-### Query
-
+- `GET /api/sessions/:id/sources`
+- `GET /api/sessions/:id/sources/:messageId`
 - `POST /api/sessions/:id/query`
+- `GET /api/suggestions`
+- `POST /api/sessions/:id/messages/:msgId/bookmark`
+- `GET /api/sessions/history/search`
 
-### Analytics
+### Analytics and export
 
 - `GET /api/analytics/overview`
 - `GET /api/analytics/top-diseases`
-- `GET /api/analytics/intent-breakdown`
 - `GET /api/analytics/source-stats`
+- `GET /api/analytics/intent-breakdown`
 - `GET /api/analytics/trial-status`
-
-### Export
-
-- `POST /api/export/:sessionId`
+- `GET /api/analytics/snapshots`
+- `GET /api/analytics/sessions/:id/breakdown`
+- `GET /api/sessions/:id/export`
 
 ### Health
 
-- `GET /api/health`
-- `GET /health` (LLM service)
+- `GET /api/health` backend
+- `GET /health` backend alias
+- `GET /health` LLM service
+- `GET /api/health` LLM service alias
 
-## Frontend Routes
+## Retrieval + generation pipeline
 
-- `/` — Landing and session launch
-- `/research/:sessionId` — Research workspace (chat + evidence + stats)
-- `/analytics` — Analytics dashboard
-- `/platform` — Product overview and pipeline view
-- `/status` — Live operational readiness view
+1. Intent classifier detects query intent category.
+2. Query expander builds source-specific query forms.
+3. Retrieval adapters fetch from PubMed/OpenAlex/ClinicalTrials.
+4. Normalizer converts to unified source shape.
+5. Reranker scores and orders candidate sources.
+6. Context packager builds citation-indexed prompt context.
+7. LLM service generates structured answer JSON.
+8. Backend persists session/message/source associations and analytics metadata.
 
-## Day 4 Status
+## Scripts
 
-- Expanded analytics API and dashboard widgets
-- Added shared loading and error UI primitives
-- Added mobile tabbed research layout
-- Added production API client configuration for frontend
-- Improved form submission resiliency and bootstrap error handling
+### Root scripts
+
+- `npm run start` starts everything
+- `npm run start:all` starts all services via `start.js`
+- `npm run context:refresh` regenerates project context files
+- `npm run check:server` backend syntax check
+- `npm run check:client` frontend build check
+- `npm run check:llm` Python compile check
+- `npm run check:integration` full smoke test
+- `npm run doctor` refresh context + all checks
+
+### Additional scripts
+
+- `node scripts/integration-smoke.mjs` end-to-end smoke scenario
+- `node scripts/latency-bench.mjs` latency benchmark run
+
+## Validation workflow
+
+Recommended local workflow before commit:
+
+```bash
+npm run doctor
+```
+
+What this validates:
+
+- server syntax checks
+- client production build
+- llm-service Python compile
+- integration smoke run across all services
+
+## Integration smoke behavior
+
+`scripts/integration-smoke.mjs` now:
+
+- accepts `MONGODB_URI` with `mongodb+srv://` or `mongodb://`,
+- auto-loads missing env values from root `.env` and `server/.env`,
+- validates health/session/query/bookmark/export/analytics/history flows.
+
+## Frontend architecture notes
+
+- Chat and evidence are message-scoped.
+- State lives in Zustand stores under `client/src/store`.
+- `EvidencePanel` coordinates tab-level source rendering.
+- Analytics dashboard consumes `/api/analytics/*` routes.
+
+## Backend architecture notes
+
+- Express app bootstraps with health/readiness contracts.
+- Mongo connection can use fallback URI strategy.
+- Query pipeline is orchestrated in `server/src/services/pipeline/orchestrator.js`.
+- Response caching and analytics snapshot scheduling are integrated.
+
+## LLM service architecture notes
+
+- Supports generation, embeddings, rerank, suggestions, and health endpoints.
+- Includes provider fallbacks and local deterministic fallback modes.
+- Normalizes output schema for backend consumption.
+
+## Troubleshooting
+
+### MongoDB connection issues on Windows
+
+If Atlas SRV DNS resolution fails:
+
+1. keep `MONGODB_URI` as primary,
+2. add `MONGODB_URI_FALLBACK` using explicit hosts (`mongodb://...`),
+3. ensure password special characters are URL-encoded.
+
+### LLM service not reachable
+
+- Verify LLM health at `http://127.0.0.1:8001/health`.
+- If changing LLM port, update backend `LLM_SERVICE_URL`.
+- Ensure `GROQ_API_KEY` is set for Groq mode.
+
+### Frontend cannot hit backend
+
+- Confirm backend is on `PORT` (default 5000).
+- Verify `VITE_API_URL` or dev proxy target.
+- Confirm CORS `FRONTEND_URL` includes active frontend origin.
+
+### Smoke test failing early
+
+- Ensure `.env` or `server/.env` has required vars.
+- Ensure `MONGODB_URI` is present and uses accepted URI scheme.
+- Ensure `GROQ_API_KEY` is available for Groq-first mode.
+
+## Known limitations
+
+- Reliability depends on external retrieval APIs and network stability.
+- Some analytics and evidence views are sensitive to source payload contract drift.
+- Semantic cache correctness should be monitored when context changes between semantically similar queries.
+
+## Docs in this repo
+
+- `PRD (1).md` product requirements
+- `DAY1_IMPLEMENTATION.md` to `DAY4_IMPLEMENTATION.md` implementation plans
+- `PROJECT_CONTEXT.md` generated operational context snapshot
+- `.github/agents/*.agent.md` agent role contracts used for coordinated development
+
+## Suggested roadmap
+
+1. tighten response-contract tests for citation/source consistency,
+2. expand automated validation to include edge-case API assertions,
+3. add CI workflows for `doctor` and smoke subsets,
+4. formalize versioned schema contracts for frontend/backend/LLM integration.
