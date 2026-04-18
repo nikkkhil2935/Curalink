@@ -70,7 +70,7 @@ export async function callLLM(systemPrompt, userPrompt) {
         temperature: 0.1,
         max_tokens: 2048
       },
-      { timeout: LLM_TIMEOUT_MS }
+      { timeout: 120000 }
     );
 
     return data;
@@ -91,7 +91,7 @@ export async function getEmbeddings(texts) {
     const { data } = await llmClient.post('/embed', { texts }, { timeout: 30000 });
     return data.embeddings;
   } catch (err) {
-    logger.warn('Embedding service unavailable, falling back to keyword scoring');
+    console.warn('Embedding service unavailable, falling back to keyword scoring');
     return null;
   }
 }
@@ -115,7 +115,7 @@ export async function semanticRerank(query, documents) {
         })),
         top_k: 100
       },
-      { timeout: EMBED_TIMEOUT_MS }
+      { timeout: 30000 }
     );
 
     const scoreMap = {};
@@ -131,7 +131,7 @@ export async function semanticRerank(query, documents) {
       }))
       .sort((a, b) => b.finalScore - a.finalScore);
   } catch (err) {
-    logger.warn('Semantic reranking failed, using keyword scores');
+    console.warn('Semantic reranking failed, using keyword scores');
     return documents;
   }
 }
@@ -160,54 +160,39 @@ export function parseLLMResponse(llmData, options = {}) {
     }
   }
 
-  return createParserFallback(options, allowedCitationIds);
+  return createParserFallback(options);
 }
 
-function normalizeAllowedCitationIds(allowedCitationIds) {
-  if (!Array.isArray(allowedCitationIds)) {
-    return [];
-  }
-
-  return allowedCitationIds
-    .map((id) => String(id || '').toUpperCase().trim())
-    .filter((id) => /^[PT]\d+$/.test(id))
-    .filter((id, index, arr) => arr.indexOf(id) === index);
-}
-
-function stripMarkdownCodeFences(rawText) {
-  if (!rawText || typeof rawText !== 'string') {
-    return '';
-  }
-
-  return rawText
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '');
-}
-
-function tryParseJson(rawText) {
+function extractJsonPayload(rawText) {
   if (!rawText || typeof rawText !== 'string') {
     return null;
   }
 
+  const cleaned = rawText
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .trim();
+
   try {
-    const parsed = JSON.parse(rawText);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    return JSON.parse(cleaned);
+  } catch {
+    // Fall through to object extraction.
+  }
+
+  const objectMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!objectMatch) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(objectMatch[0]);
   } catch {
     return null;
   }
 }
 
-function extractFirstObjectJson(rawText) {
-  const objectMatch = String(rawText || '').match(/\{[\s\S]*\}/);
-  if (!objectMatch) {
-    return null;
-  }
-
-  return tryParseJson(objectMatch[0]);
-}
-
-function createParserFallback(options = {}, allowedCitationIds = []) {
+function createParserFallback(options = {}) {
   const strength = ['LIMITED', 'MODERATE', 'STRONG'].includes(options.evidenceStrengthLabel)
     ? options.evidenceStrengthLabel
     : 'LIMITED';
@@ -217,55 +202,14 @@ function createParserFallback(options = {}, allowedCitationIds = []) {
     options.contextDocs
   );
 
-  const publicationCitations = allowedCitationIds.filter((id) => /^P\d+$/.test(id));
-  const trialCitations = allowedCitationIds.filter((id) => /^T\d+$/.test(id));
-
-  const researchInsights = contextDocs
-    .filter((doc) => doc?.type === 'publication')
-    .slice(0, 3)
-    .map((doc, index) => {
-      const citationId = publicationCitations[index];
-      if (!citationId) {
-        return null;
-      }
-
-      return {
-        insight: String(doc?.abstract || doc?.title || 'Evidence not available in current research pool.').slice(0, 150),
-        type: 'GENERAL',
-        source_ids: [citationId]
-      };
-    })
-    .filter(Boolean);
-
-  const clinicalTrials = contextDocs
-    .filter((doc) => doc?.type === 'trial')
-    .slice(0, 3)
-    .map((doc, index) => {
-      const citationId = trialCitations[index];
-      if (!citationId) {
-        return null;
-      }
-
-      return {
-        summary: String(doc?.title || 'Clinical trial details are limited in current context.'),
-        status: String(doc?.status || 'UNKNOWN'),
-        location_relevant: Boolean(doc?.isLocationRelevant),
-        contact: doc?.contacts?.[0]
-          ? `${doc.contacts[0].name || ''}${doc.contacts[0].email ? ` (${doc.contacts[0].email})` : ''}`.trim()
-          : '',
-        source_ids: [citationId]
-      };
-    })
-    .filter(Boolean);
-
-  return normalizeStructuredAnswer({
+  return {
     condition_overview: `Structured generation could not be validated for ${disease}. Please review the evidence panel directly.`,
     evidence_strength: strength,
-    research_insights: researchInsights,
-    clinical_trials: clinicalTrials,
+    research_insights: [],
+    clinical_trials: [],
     key_researchers: [],
     recommendations:
-      'Based on the retrieved research, please review the sources listed. Please consult your healthcare provider for personalized guidance.',
+      'A structured summary was not available for this response. Please consult your healthcare provider for personalized guidance.',
     follow_up_suggestions: [
       'Can you summarize the strongest findings from the listed sources?',
       'Can you focus on recruiting clinical trials near my location?',
@@ -280,7 +224,6 @@ function isValidStructuredAnswer(obj) {
     obj &&
     typeof obj === 'object' &&
     typeof obj.condition_overview === 'string' &&
-    obj.condition_overview.trim().length > 0 &&
     Array.isArray(obj.research_insights) &&
     Array.isArray(obj.clinical_trials) &&
     Array.isArray(obj.follow_up_suggestions) &&
@@ -335,17 +278,19 @@ function buildDefaultConfidenceBreakdown(allowedCitationIds = [], contextDocs = 
 
 function normalizeStructuredAnswer(answer, allowedCitationIds = [], contextDocs = []) {
   const allowedSet = new Set(
-    normalizeAllowedCitationIds(allowedCitationIds)
+    (Array.isArray(allowedCitationIds) ? allowedCitationIds : []).map((id) =>
+      String(id).toUpperCase()
+    )
   );
 
-  const normalizeSourceIds = (sourceIds, expectedPrefix) => {
+  const normalizeSourceIds = (sourceIds) => {
     if (!Array.isArray(sourceIds)) {
       return [];
     }
 
     const ids = sourceIds
       .map((id) => String(id).toUpperCase().trim())
-      .filter((id) => Boolean(id) && (!expectedPrefix || id.startsWith(expectedPrefix)));
+      .filter(Boolean);
 
     if (!allowedSet.size) {
       return [];
@@ -354,26 +299,26 @@ function normalizeStructuredAnswer(answer, allowedCitationIds = [], contextDocs 
     return ids.filter((id, index) => allowedSet.has(id) && ids.indexOf(id) === index);
   };
 
-  const normalizedInsights = Array.isArray(safeAnswer.research_insights)
-    ? safeAnswer.research_insights
+  const normalizedInsights = Array.isArray(answer.research_insights)
+    ? answer.research_insights
         .map((insight) => ({
           insight: insight?.insight || '',
           type: ['TREATMENT', 'DIAGNOSIS', 'RISK', 'PREVENTION', 'GENERAL'].includes(insight?.type)
             ? insight.type
             : 'GENERAL',
-          source_ids: normalizeSourceIds(insight?.source_ids, 'P')
+          source_ids: normalizeSourceIds(insight?.source_ids)
         }))
         .filter((insight) => insight.insight && insight.source_ids.length > 0)
     : [];
 
-  const normalizedTrials = Array.isArray(safeAnswer.clinical_trials)
-    ? safeAnswer.clinical_trials
+  const normalizedTrials = Array.isArray(answer.clinical_trials)
+    ? answer.clinical_trials
         .map((trial) => ({
           summary: trial?.summary || '',
           status: trial?.status || '',
           location_relevant: Boolean(trial?.location_relevant),
           contact: trial?.contact || '',
-          source_ids: normalizeSourceIds(trial?.source_ids, 'T')
+          source_ids: normalizeSourceIds(trial?.source_ids)
         }))
         .filter((trial) => trial.summary && trial.source_ids.length > 0)
     : [];
@@ -385,19 +330,19 @@ function normalizeStructuredAnswer(answer, allowedCitationIds = [], contextDocs 
   ];
 
   const followUpSuggestions = [
-    ...(Array.isArray(safeAnswer.follow_up_suggestions) ? safeAnswer.follow_up_suggestions : [])
+    ...(Array.isArray(answer.follow_up_suggestions) ? answer.follow_up_suggestions : [])
       .map((value) => String(value || '').trim())
       .filter(Boolean),
     ...followUpDefaults
   ].filter((value, index, arr) => arr.indexOf(value) === index).slice(0, 3);
 
-  const baseRecommendations = String(safeAnswer.recommendations || '').trim();
+  const baseRecommendations = String(answer.recommendations || '').trim();
   const providerSuffix = 'Please consult your healthcare provider for personalized guidance.';
   const recommendations = baseRecommendations
-    ? baseRecommendations.toLowerCase().includes(providerSuffix.toLowerCase())
+    ? baseRecommendations.toLowerCase().includes('please consult your healthcare provider')
       ? baseRecommendations
       : `${baseRecommendations.replace(/\.+$/, '')}. ${providerSuffix}`
-    : `Based on the retrieved research, please review the listed sources. ${providerSuffix}`;
+    : providerSuffix;
 
   const confidenceBreakdownMap = new Map();
   if (Array.isArray(answer.confidence_breakdown)) {
@@ -444,18 +389,13 @@ function normalizeStructuredAnswer(answer, allowedCitationIds = [], contextDocs 
   }
 
   return {
-    condition_overview:
-      String(safeAnswer.condition_overview || '').trim() || 'Evidence not available in current research pool.',
-    evidence_strength: ['LIMITED', 'MODERATE', 'STRONG'].includes(safeAnswer.evidence_strength)
-      ? safeAnswer.evidence_strength
+    condition_overview: String(answer.condition_overview || ''),
+    evidence_strength: ['LIMITED', 'MODERATE', 'STRONG'].includes(answer.evidence_strength)
+      ? answer.evidence_strength
       : 'MODERATE',
     research_insights: normalizedInsights,
     clinical_trials: normalizedTrials,
-    key_researchers: Array.isArray(safeAnswer.key_researchers)
-      ? safeAnswer.key_researchers
-          .map((value) => String(value || '').trim())
-          .filter(Boolean)
-      : [],
+    key_researchers: Array.isArray(answer.key_researchers) ? answer.key_researchers.filter(Boolean) : [],
     recommendations,
     follow_up_suggestions: followUpSuggestions,
     confidence_breakdown: Array.from(confidenceBreakdownMap.values())
