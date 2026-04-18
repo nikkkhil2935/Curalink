@@ -9,6 +9,7 @@ import {
   getTopDiseases,
   getTrialStatus
 } from '../services/analyticsService.js';
+import { gzipCompression } from '../middleware/gzipCompression.js';
 
 const router = express.Router();
 router.use(gzipCompression());

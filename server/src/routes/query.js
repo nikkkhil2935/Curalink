@@ -5,6 +5,9 @@ import Message from '../models/Message.js';
 import { runRetrievalPipeline } from '../services/pipeline/orchestrator.js';
 import { generateSmartSuggestions } from '../services/llm.js';
 import { invalidateInsightsCache } from '../middleware/insightsCache.js';
+import { gzipCompression } from '../middleware/gzipCompression.js';
+import { applyHealthResponseContractPatch } from '../services/healthContract.js';
+import { invalidateSessionInsightsCache } from '../services/insightsCache.js';
 import {
   getCachedQueryResult,
   setCachedQueryResult
@@ -153,6 +156,7 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       responseText,
       structuredAnswer,
       contextDocs,
+      evidenceDocs,
       stats,
       evidenceStrength,
       intentType,
