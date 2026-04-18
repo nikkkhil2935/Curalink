@@ -10,6 +10,7 @@ import os
 import re
 import time
 from collections import OrderedDict
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Set, TypedDict
@@ -52,7 +53,17 @@ except Exception as exc:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Curalink LLM Service", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if not can_use_local_embedding_model():
+        logger.warning("Embedding dependencies unavailable: %s", embedding_import_error or "numpy missing")
+    elif EMBEDDING_BACKGROUND_WARMUP:
+        schedule_embedding_model_load("startup")
+
+    yield
+
+
+app = FastAPI(title="Curalink LLM Service", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,6 +84,8 @@ FALLBACK_EMBED_DIM = max(32, int(os.getenv("FALLBACK_EMBED_DIM", "384")))
 USE_LANGGRAPH_WORKFLOW = os.getenv("USE_LANGGRAPH_WORKFLOW", "true").lower() != "false"
 SEMANTIC_CACHE_THRESHOLD = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.92"))
 SEMANTIC_CACHE_MAX_SIZE = max(16, int(os.getenv("SEMANTIC_CACHE_MAX_SIZE", "256")))
+LOCAL_EMBED_MODEL = os.getenv("LOCAL_EMBED_MODEL", "all-MiniLM-L6-v2")
+EMBEDDING_BACKGROUND_WARMUP = os.getenv("EMBEDDING_BACKGROUND_WARMUP", "true").lower() != "false"
 LAST_GENERATION_PROVIDER = "none"
 LAST_GENERATION_AT: Optional[float] = None
 EMBEDDING_BACKEND = "hash-fallback"
@@ -82,19 +95,47 @@ SERVICE_STARTED_AT = time.time()
 semantic_response_cache: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
 semantic_cache_lock = asyncio.Lock()
 
-embed_model = None
-if SentenceTransformer is not None and np is not None:
+embed_model: Any = None
+embed_model_load_task: Optional[asyncio.Task[Any]] = None
+
+
+def can_use_local_embedding_model() -> bool:
+    return SentenceTransformer is not None and np is not None
+
+
+async def load_embedding_model_in_background(trigger: str) -> None:
+    global EMBEDDING_BACKEND, EMBEDDING_MODEL, embed_model, embedding_import_error, embed_model_load_task
+
     try:
-        logger.info("Loading embedding model...")
-        embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+        logger.info("Loading embedding model in background (trigger=%s)...", trigger)
+        embed_model = await asyncio.to_thread(SentenceTransformer, LOCAL_EMBED_MODEL)
         EMBEDDING_BACKEND = "sentence-transformers"
-        EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+        EMBEDDING_MODEL = LOCAL_EMBED_MODEL
+        embedding_import_error = None
         logger.info("Embedding model loaded")
     except Exception as exc:
         embedding_import_error = str(exc)
         logger.warning("Embedding model unavailable: %s", embedding_import_error)
-else:
-    logger.warning("Embedding dependencies unavailable: %s", embedding_import_error or "numpy missing")
+    finally:
+        embed_model_load_task = None
+
+
+def schedule_embedding_model_load(trigger: str) -> None:
+    global embed_model_load_task
+
+    if embed_model is not None:
+        return
+
+    if not can_use_local_embedding_model():
+        return
+
+    if embed_model_load_task is not None:
+        return
+
+    embed_model_load_task = asyncio.create_task(
+        load_embedding_model_in_background(trigger),
+        name="embedding-model-loader",
+    )
 
 
 class GenerateRequest(BaseModel):
@@ -596,6 +637,17 @@ if USE_LANGGRAPH_WORKFLOW and StateGraph is not None and END is not None:
     LANGGRAPH_WORKFLOW = _workflow.compile()
 
 
+@app.get("/")
+async def root():
+    return {
+        "service": "curalink-llm",
+        "status": "ok",
+        "version": app.version,
+        "uptime_ms": int((time.time() - SERVICE_STARTED_AT) * 1000),
+        "timestamp": now_utc_iso(),
+    }
+
+
 @app.get("/health")
 async def health():
     llm_status = await detect_llm_status()
@@ -692,6 +744,9 @@ def build_semantic_cache_key(query_embedding: List[float]) -> str:
 
 async def generate_query_embedding(text: str) -> List[float]:
     normalized_text = str(text or "").strip()[:512]
+
+    if embed_model is None:
+        schedule_embedding_model_load("query-embedding")
 
     if embed_model is not None and np is not None:
         vector = embed_model.encode([normalized_text], normalize_embeddings=True)[0]
@@ -1222,6 +1277,9 @@ async def embed(req: EmbedRequest):
     model_name = EMBEDDING_MODEL
     warning: Optional[str] = None
 
+    if embed_model is None:
+        schedule_embedding_model_load("embed")
+
     if embed_model is not None and np is not None:
         embeddings = embed_model.encode(truncated, normalize_embeddings=True).tolist()
     else:
@@ -1235,6 +1293,9 @@ async def embed(req: EmbedRequest):
             mode = "hash-fallback"
             model_name = "hash-fallback"
             warning = ollama_error or embedding_import_error
+
+            if warning is None and embed_model_load_task is not None:
+                warning = "Embedding model is warming up; using fallback embeddings"
 
     return {
         "embeddings": embeddings,
@@ -1254,6 +1315,9 @@ async def rerank(req: RerankRequest):
 
     texts = [doc.get("text", "")[:512] for doc in req.documents]
     embedding_mode = EMBEDDING_BACKEND
+
+    if embed_model is None:
+        schedule_embedding_model_load("rerank")
 
     if embed_model is not None and np is not None:
         query_embedding = embed_model.encode([req.query], normalize_embeddings=True)[0]

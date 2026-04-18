@@ -37,6 +37,6 @@ services:
       - key: MONGODB_URI
         sync: false
       - key: LLM_SERVICE_URL
-        sync: false
+        value: https://curalink-llm.onrender.com
       - key: FRONTEND_URL
         sync: false

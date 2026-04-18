@@ -35,6 +35,8 @@ if (process.env.NODE_ENV !== 'production' && dotenvResult.parsed) {
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
 const APP_VERSION = process.env.APP_VERSION || process.env.npm_package_version || '1.0.0';
+const DEFAULT_LOCAL_LLM_SERVICE_URL = 'http://127.0.0.1:8001';
+const DEFAULT_RENDER_LLM_SERVICE_URL = 'https://curalink-llm.onrender.com';
 const configuredOrigins = (process.env.FRONTEND_URL || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -89,6 +91,15 @@ const queryLimiter = rateLimit({
   max: 20,
   standardHeaders: 'draft-7',
   legacyHeaders: false
+});
+
+app.get('/', (req, res) => {
+  return res.status(200).json({
+    service: 'curalink-api',
+    status: 'ok',
+    version: APP_VERSION,
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.use('/api/', apiLimiter);
@@ -219,7 +230,11 @@ function normalizeServiceStatus(value, fallback = 'offline') {
 }
 
 async function getLlmServiceStatus() {
-  const llmServiceUrl = process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001';
+  const configuredUrl = String(process.env.LLM_SERVICE_URL || '').trim().replace(/\/+$/, '');
+  const isLoopback = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(configuredUrl);
+  const llmServiceUrl = configuredUrl && !(isProduction && isLoopback)
+    ? configuredUrl
+    : (isProduction ? DEFAULT_RENDER_LLM_SERVICE_URL : DEFAULT_LOCAL_LLM_SERVICE_URL);
 
   try {
     const response = await fetch(`${llmServiceUrl}/health`);
