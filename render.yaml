@@ -46,5 +46,7 @@ services:
         sync: false
       - key: LLM_SERVICE_URL
         value: https://curalink-llm.onrender.com
+      - key: LLM_SERVICE_TOKEN
+        sync: false
       - key: FRONTEND_URL
         sync: false

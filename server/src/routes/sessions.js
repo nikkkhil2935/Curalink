@@ -14,6 +14,7 @@ import {
   setInsightsCache
 } from '../middleware/insightsCache.js';
 import { invalidateSessionQueryCache } from '../services/queryResultCache.js';
+import { getLlmRequestHeaders } from '../lib/llmServiceAuth.js';
 
 const router = express.Router();
 export const bookmarksRouter = express.Router();
@@ -737,7 +738,10 @@ router.delete('/:id', async (req, res, next) => {
     invalidateSessionQueryCache(req.params.id);
 
     void axios
-      .delete(`${LLM_SERVICE_URL}/pdf/session/${req.params.id}`, { timeout: 15000 })
+      .delete(`${LLM_SERVICE_URL}/pdf/session/${req.params.id}`, {
+        headers: getLlmRequestHeaders(),
+        timeout: 15000
+      })
       .catch((error) => {
         logger.warn(`Session ${req.params.id} deleted but PDF store cleanup failed: ${error?.message || error}`);
       });

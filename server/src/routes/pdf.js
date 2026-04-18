@@ -7,6 +7,7 @@ import FormData from 'form-data';
 import Session from '../models/Session.js';
 import Analytics from '../models/Analytics.js';
 import logger from '../lib/logger.js';
+import { getLlmRequestHeaders } from '../lib/llmServiceAuth.js';
 
 const router = express.Router();
 const LLM_SERVICE_URL = String(process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001').replace(/\/+$/, '');
@@ -57,7 +58,7 @@ router.post('/:id/pdf/upload', upload.single('pdf'), async (req, res, next) => {
     formData.append('session_id', String(session._id));
 
     const { data } = await axios.post(`${LLM_SERVICE_URL}/pdf/ingest`, formData, {
-      headers: formData.getHeaders(),
+      headers: getLlmRequestHeaders(formData.getHeaders()),
       timeout: 180000
     });
 
@@ -159,6 +160,7 @@ router.delete('/:id/pdf/docs/:docId', async (req, res, next) => {
     let deletedChunks = 0;
     try {
       const { data } = await axios.delete(`${LLM_SERVICE_URL}/pdf/document/${sessionId}/${encodeURIComponent(docId)}`, {
+        headers: getLlmRequestHeaders(),
         timeout: 30000
       });
       deletedChunks = Number(data?.deleted_chunks || 0);
@@ -203,7 +205,10 @@ router.get('/:id/pdf/stats', async (req, res, next) => {
     }
 
     await findSessionOrThrow(sessionId);
-    const { data } = await axios.get(`${LLM_SERVICE_URL}/pdf/stats/${sessionId}`, { timeout: 30000 });
+    const { data } = await axios.get(`${LLM_SERVICE_URL}/pdf/stats/${sessionId}`, {
+      headers: getLlmRequestHeaders(),
+      timeout: 30000
+    });
     return res.json(data || { total_chunks: 0, doc_ids: [], doc_count: 0 });
   } catch (error) {
     if (error?.response?.status) {

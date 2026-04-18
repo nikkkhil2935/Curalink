@@ -16,6 +16,7 @@ import exportRoutes from './routes/export.js';
 import pdfRoutes from './routes/pdf.js';
 import { startAnalyticsScheduler, stopAnalyticsScheduler } from './services/scheduler.js';
 import logger from './lib/logger.js';
+import { getLlmRequestHeaders } from './lib/llmServiceAuth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -272,6 +273,7 @@ async function fetchLlmServiceStatus() {
 
   try {
     const response = await fetch(`${llmServiceUrl}/health`, {
+      headers: getLlmRequestHeaders(),
       signal: AbortSignal.timeout(LLM_HEALTH_TIMEOUT_MS)
     });
 

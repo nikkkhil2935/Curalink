@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { Agent as HttpAgent } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
+import { getLlmRequestHeaders } from '../lib/llmServiceAuth.js';
 
 const LLM_SERVICE_URL = process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001';
 const LLM_KEEP_ALIVE_MS = Number.parseInt(process.env.LLM_KEEP_ALIVE_MS || '30000', 10);
@@ -24,7 +25,8 @@ const llmClient = axios.create({
   baseURL: LLM_SERVICE_URL,
   timeout: 120000,
   httpAgent: llmHttpAgent,
-  httpsAgent: llmHttpsAgent
+  httpsAgent: llmHttpsAgent,
+  headers: getLlmRequestHeaders()
 });
 
 function normalizeSuggestions(items, limit = 5) {

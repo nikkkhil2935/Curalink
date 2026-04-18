@@ -785,6 +785,7 @@ node scripts/integration-smoke.mjs
 | `MONGODB_URI` | Primary MongoDB connection URI (required). |
 | `MONGODB_URI_FALLBACK` | Optional fallback URI when primary SRV path fails in some environments. |
 | `LLM_SERVICE_URL` | Backend-to-LLM service base URL. |
+| `LLM_SERVICE_TOKEN` | Optional bearer token for private LLM endpoints (for example private Hugging Face Spaces). |
 | `FRONTEND_URL` | Comma-separated CORS allowlist origins. |
 | `PORT` | Backend listen port. |
 | `NODE_ENV` | Runtime mode. |
@@ -808,8 +809,9 @@ node scripts/integration-smoke.mjs
 
 | Variable | Purpose |
 |---|---|
-| `PRIMARY_LLM_PROVIDER` | Chooses provider order (`groq` or `ollama`). |
+| `PRIMARY_LLM_PROVIDER` | Chooses provider order (`groq`, `huggingface`, or `ollama`). |
 | `GROQ_API_KEY`, `GROQ_MODEL` | Hosted provider credentials/model. |
+| `HF_API_TOKEN`, `HF_MODEL`, `HF_INFERENCE_URL` | Hugging Face Inference provider credentials/model/endpoint. |
 | `OLLAMA_URL`, `OLLAMA_MODEL` | Local model endpoint/model. |
 | `OLLAMA_EMBED_MODEL`, `OLLAMA_EMBED_TIMEOUT_SEC` | Ollama embedding fallback behavior. |
 | `LOCAL_FALLBACK_ENABLED` | Enables local synthetic fallback when providers fail. |
@@ -817,6 +819,21 @@ node scripts/integration-smoke.mjs
 | `USE_LANGGRAPH_WORKFLOW` | Enables LangGraph state workflow path for generation. |
 | `SEMANTIC_CACHE_THRESHOLD`, `SEMANTIC_CACHE_MAX_SIZE` | Generation semantic cache controls. |
 | `LOCAL_EMBED_MODEL`, `EMBEDDING_BACKGROUND_WARMUP` | sentence-transformer loading behavior. |
+
+### Render API to Hugging Face Space wiring
+
+1. In your Hugging Face Space settings, configure runtime variables:
+  - `PRIMARY_LLM_PROVIDER=huggingface` (or `groq` if you want Groq inside Space)
+  - `HF_API_TOKEN=<your_hf_token>`
+  - `HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3`
+  - `LOCAL_FALLBACK_ENABLED=true` (recommended safety net)
+2. In Render service `curalink-api`, set:
+  - `LLM_SERVICE_URL=https://nikkkhil2935-curalink-llm.hf.space`
+  - `LLM_SERVICE_TOKEN=<your_hf_token>` if the Space is private
+3. Redeploy `curalink-api` after updating env vars.
+4. Verify the linked path:
+  - `GET /api/health` on Render should show `llm: online` or `llm: degraded`
+  - `POST /api/sessions/:id/query` should return `provider` as `huggingface`, `groq`, or fallback depending on configured provider and availability.
 
 ## 13. Design Decisions & Trade-offs
 
