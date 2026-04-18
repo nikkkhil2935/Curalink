@@ -35,6 +35,37 @@ const confidenceBreakdownEntrySchema = new mongoose.Schema(
   { _id: false }
 );
 
+const conflictSourceSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    title: { type: String, default: '' },
+    year: { type: Number, default: null },
+    journal: { type: String, default: '' },
+    credibility: { type: Number, default: 0 },
+    position: {
+      type: String,
+      enum: ['positive', 'negative', 'neutral'],
+      default: 'neutral'
+    }
+  },
+  { _id: false }
+);
+
+const conflictReportSchema = new mongoose.Schema(
+  {
+    outcomePhrase: { type: String, required: true },
+    sourceA: { type: conflictSourceSchema, required: true },
+    sourceB: { type: conflictSourceSchema, required: true },
+    conflictScore: { type: Number, default: 0 },
+    severity: {
+      type: String,
+      enum: ['low', 'medium', 'high'],
+      default: 'low'
+    }
+  },
+  { _id: false }
+);
+
 const structuredAnswerSchema = new mongoose.Schema(
   {
     condition_overview: String,
@@ -47,7 +78,8 @@ const structuredAnswerSchema = new mongoose.Schema(
     key_researchers: [String],
     recommendations: String,
     follow_up_suggestions: [String],
-    confidence_breakdown: [confidenceBreakdownEntrySchema]
+    confidence_breakdown: [confidenceBreakdownEntrySchema],
+    demographicFlags: [String]
   },
   { _id: false }
 );
@@ -74,10 +106,22 @@ const messageSchema = new mongoose.Schema(
     },
     text: { type: String, required: true },
     structuredAnswer: { type: structuredAnswerSchema, default: null },
+    conflicts: {
+      type: [conflictReportSchema],
+      default: []
+    },
     usedSourceIds: [String],
     sourceIndex: {
       type: mongoose.Schema.Types.Mixed,
       default: {}
+    },
+    pdfContextUsed: {
+      type: Boolean,
+      default: false
+    },
+    pdfChunksUsed: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: []
     },
     retrievalStats: {
       traceId: String,

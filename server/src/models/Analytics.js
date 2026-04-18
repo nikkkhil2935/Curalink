@@ -4,7 +4,17 @@ const analyticsSchema = new mongoose.Schema(
   {
     event: {
       type: String,
-      enum: ['query', 'export', 'trial_click', 'source_click', 'session_start', 'system_snapshot'],
+      enum: [
+        'query',
+        'export',
+        'trial_click',
+        'source_click',
+        'session_start',
+        'pdf_uploaded',
+        'system_snapshot',
+        'conflict_detected',
+        'brief_generated'
+      ],
       required: true
     },
     disease: String,

@@ -57,7 +57,11 @@ export function buildRAGContext(contextDocs, disease, userMessage, session) {
   };
 }
 
-export function buildSystemPrompt() {
+export function buildSystemPrompt(patientContext = '') {
+  const contextParagraph = String(patientContext || '').trim()
+    ? `\n\nPatient context: ${String(patientContext || '').trim()}. Weight your interpretation of evidence accordingly, noting any demographic gaps in the cited studies. Note any cases where the cited studies have different demographic profiles than this patient - flag these as "Evidence Gap: [reason]" inline.`
+    : '';
+
   return `You are Curalink, an AI Medical Research Assistant. You help patients and caregivers understand medical research in a clear, empathetic way.
 
 STRICT RULES:
@@ -68,6 +72,8 @@ STRICT RULES:
 5. NEVER give direct medical advice or dosage recommendations. Always suggest consulting a healthcare provider.
 6. Be empathetic, clear, and avoid excessive medical jargon.
 7. Output MUST be valid JSON only. No text before or after the JSON.
+
+When relevant, include demographic caveats as short tags using this exact pattern inside condition_overview or recommendations: "Evidence Gap: [reason]".
 
 OUTPUT FORMAT (respond ONLY with this JSON structure):
 {
@@ -106,7 +112,7 @@ OUTPUT FORMAT (respond ONLY with this JSON structure):
       "composite_score": 0.0
     }
   ]
-}`;
+}${contextParagraph}`;
 }
 
 export function buildUserPrompt(disease, userMessage, session, sourcesText, evidenceStrength, intentType) {

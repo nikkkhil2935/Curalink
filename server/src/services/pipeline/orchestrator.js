@@ -7,6 +7,8 @@ import { fetchFromClinicalTrials } from '../apis/clinicaltrials.js';
 import { normalizeAndDeduplicate } from './normalizer.js';
 import { rerankCandidates, selectForContext, computeEvidenceStrength } from './reranker.js';
 import { buildRAGContext, buildSystemPrompt, buildUserPrompt } from './contextPackager.js';
+import { detectEvidenceConflicts } from './conflictDetector.js';
+import { buildPatientProfile } from './patientProfileAdapter.js';
 import { callLLM, parseLLMResponse, semanticRerank } from '../llm.js';
 import SourceDoc from '../../models/SourceDoc.js';
 import logger from '../../lib/logger.js';
@@ -32,6 +34,7 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
 
   stageStart = Date.now();
   const expanded = expandQuery(session.disease, userMessage, intentType);
+  const patientProfile = buildPatientProfile(session);
 
   const isFollowUp = conversationHistory.length > 0;
   let contextBadge = null;
@@ -113,11 +116,13 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
       contextDocs: [],
       evidenceDocs: [],
       rankedAll: [],
+      conflicts: [],
       stats,
       evidenceStrength,
       intentType,
       expandedQuery: expanded,
       contextBadge,
+      patientProfile,
       sourceIndex: {},
       trace
     };
@@ -129,7 +134,13 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     .map((term) => term.trim())
     .filter((term) => term.length > 3);
 
-  const keywordRanked = rerankCandidates(normalized, queryTerms, intentType, session.location);
+  const keywordRanked = rerankCandidates(
+    normalized,
+    queryTerms,
+    intentType,
+    session.location,
+    patientProfile.retrievalBoosts
+  );
   const publicationQuota = intentType === 'CLINICAL_TRIALS' ? 35 : 55;
   const trialQuota = intentType === 'CLINICAL_TRIALS' ? 35 : 20;
 
@@ -155,6 +166,7 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
 
   const minTrialsForContext = ctResults.length > 0 ? (intentType === 'CLINICAL_TRIALS' ? 2 : 1) : 0;
   const contextDocs = selectForContext(ranked, 8, 5, { minTrials: minTrialsForContext });
+  const conflicts = detectEvidenceConflicts(ranked.slice(0, 60));
   stats.rerankedTo = contextDocs.length;
 
   const evidenceStrength = computeEvidenceStrength(contextDocs);
@@ -194,7 +206,7 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     session
   );
 
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt(patientProfile.promptContext);
   const userPrompt = buildUserPrompt(
     session.disease,
     userMessage,
@@ -267,11 +279,29 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
       stats,
       queryExpanded: expanded.fullQuery,
       strategy,
-      trace
+      trace,
+      patientProfile
     }
   }).catch((err) => {
     logger.error(`Analytics logging error: ${err.message}`);
   });
+
+  if (conflicts.length > 0) {
+    await Analytics.create({
+      event: 'conflict_detected',
+      disease: session.disease.toLowerCase(),
+      intentType,
+      sessionId: session._id,
+      metadata: {
+        conflictCount: conflicts.length,
+        severities: conflicts.map((conflict) => conflict.severity),
+        sessionId: String(session._id),
+        disease: session.disease
+      }
+    }).catch((err) => {
+      logger.error(`Conflict analytics logging error: ${err.message}`);
+    });
+  }
 
   return {
     responseText,
@@ -279,11 +309,13 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     contextDocs,
     evidenceDocs: ranked,
     rankedAll: ranked,
+    conflicts,
     stats,
     evidenceStrength,
     intentType,
     expandedQuery: expanded,
     contextBadge,
+    patientProfile,
     sourceIndex,
     trace
   };

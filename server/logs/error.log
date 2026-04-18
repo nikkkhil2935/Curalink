@@ -4,3 +4,7 @@
 {"level":"error","message":"Port 5000 is already in use. Stop the existing process or set PORT.","timestamp":"2026-04-17T21:59:55.746Z"}
 {"level":"error","message":"Port 5000 is already in use. Stop the existing process or set PORT.","timestamp":"2026-04-17T22:00:50.675Z"}
 {"level":"error","message":"Port 5000 is already in use. Stop the existing process or set PORT.","timestamp":"2026-04-17T22:00:56.319Z"}
+{"level":"error","message":"Error:","timestamp":"2026-04-18T21:01:35.931Z"}
+{"level":"error","message":"Port 5000 is already in use. Stop the existing process or set PORT.","timestamp":"2026-04-18T21:10:53.408Z"}
+{"level":"error","message":"ClinicalTrials fetch error: Request failed with status code 400","timestamp":"2026-04-18T21:39:56.402Z"}
+{"level":"error","message":"ClinicalTrials fetch error: Request failed with status code 400","timestamp":"2026-04-18T21:39:56.710Z"}

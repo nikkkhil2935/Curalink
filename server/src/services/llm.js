@@ -60,7 +60,8 @@ export async function generateSmartSuggestions({ partialQuery, history, commonTo
 /**
  * Call LLM service for RAG generation.
  */
-export async function callLLM(systemPrompt, userPrompt) {
+export async function callLLM(systemPrompt, userPrompt, options = {}) {
+  const maxTokens = Number.parseInt(String(options?.max_tokens || options?.maxTokens || 2048), 10);
   try {
     const { data } = await llmClient.post(
       '/generate',
@@ -68,7 +69,7 @@ export async function callLLM(systemPrompt, userPrompt) {
         system_prompt: systemPrompt,
         user_prompt: userPrompt,
         temperature: 0.1,
-        max_tokens: 2048
+        max_tokens: Number.isFinite(maxTokens) ? maxTokens : 2048
       },
       { timeout: 120000 }
     );
@@ -140,6 +141,10 @@ export async function semanticRerank(query, documents) {
  * Parse and validate LLM response with resilient fallback behavior.
  */
 export function parseLLMResponse(llmData, options = {}) {
+  if (options?.mode === 'brief') {
+    return parseBriefLlmResponse(llmData, options);
+  }
+
   const allowedCitationIds = Array.isArray(options.allowedCitationIds)
     ? options.allowedCitationIds.map((id) => String(id).toUpperCase())
     : [];
@@ -215,7 +220,8 @@ function createParserFallback(options = {}) {
       'Can you focus on recruiting clinical trials near my location?',
       'Can you compare benefits and risks from the top studies?'
     ],
-    confidence_breakdown: fallbackBreakdown
+    confidence_breakdown: fallbackBreakdown,
+    demographicFlags: []
   };
 }
 
@@ -388,6 +394,24 @@ function normalizeStructuredAnswer(answer, allowedCitationIds = [], contextDocs 
     });
   }
 
+  const explicitDemographicFlags = []
+    .concat(answer?.demographicFlags || [])
+    .concat(answer?.demographic_flags || [])
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
+  const extractedDemographicFlags = extractEvidenceGapTags([
+    answer?.condition_overview,
+    answer?.recommendations,
+    ...(Array.isArray(answer?.research_insights)
+      ? answer.research_insights.map((insight) => insight?.insight)
+      : [])
+  ]);
+
+  const demographicFlags = [...explicitDemographicFlags, ...extractedDemographicFlags]
+    .filter((value, index, all) => all.indexOf(value) === index)
+    .slice(0, 8);
+
   return {
     condition_overview: String(answer.condition_overview || ''),
     evidence_strength: ['LIMITED', 'MODERATE', 'STRONG'].includes(answer.evidence_strength)
@@ -398,7 +422,86 @@ function normalizeStructuredAnswer(answer, allowedCitationIds = [], contextDocs 
     key_researchers: Array.isArray(answer.key_researchers) ? answer.key_researchers.filter(Boolean) : [],
     recommendations,
     follow_up_suggestions: followUpSuggestions,
-    confidence_breakdown: Array.from(confidenceBreakdownMap.values())
+    confidence_breakdown: Array.from(confidenceBreakdownMap.values()),
+    demographicFlags
+  };
+}
+
+function extractEvidenceGapTags(textChunks = []) {
+  const matches = [];
+  const pattern = /evidence\s*gap\s*:\s*([^\n.]+)/gi;
+
+  for (const chunk of textChunks) {
+    const text = String(chunk || '');
+    if (!text) {
+      continue;
+    }
+
+    let result = pattern.exec(text);
+    while (result) {
+      const tag = String(result[1] || '').trim();
+      if (tag) {
+        matches.push(tag);
+      }
+      result = pattern.exec(text);
+    }
+    pattern.lastIndex = 0;
+  }
+
+  return matches;
+}
+
+function parseBriefLlmResponse(llmData, options = {}) {
+  const parsedFromPayload =
+    llmData?.parsed && typeof llmData.parsed === 'object'
+      ? llmData.parsed
+      : null;
+  const parsedFromText = extractJsonPayload(llmData?.text || '');
+  const briefPayload = parsedFromPayload || parsedFromText;
+
+  if (!briefPayload || typeof briefPayload !== 'object') {
+    return createBriefFallback(options);
+  }
+
+  const keySources = Array.isArray(briefPayload.keySources)
+    ? briefPayload.keySources
+    : Array.isArray(briefPayload.key_sources)
+      ? briefPayload.key_sources
+      : [];
+
+  return {
+    background: String(briefPayload.background || '').trim(),
+    currentEvidence: String(briefPayload.currentEvidence || briefPayload.current_evidence || '').trim(),
+    conflicts: String(briefPayload.conflicts || '').trim(),
+    openQuestions: String(briefPayload.openQuestions || briefPayload.open_questions || '').trim(),
+    keySources: keySources
+      .map((entry) => ({
+        id: String(entry?.id || '').trim(),
+        title: String(entry?.title || '').trim(),
+        year: Number(entry?.year) || null,
+        url: String(entry?.url || '').trim()
+      }))
+      .filter((entry) => entry.id || entry.title)
+      .slice(0, 12)
+  };
+}
+
+function createBriefFallback(options = {}) {
+  const fallbackSources = Array.isArray(options?.fallbackSources)
+    ? options.fallbackSources
+    : [];
+
+  return {
+    background: 'A structured research brief could not be generated from the model response.',
+    currentEvidence: '',
+    conflicts: '',
+    openQuestions: '',
+    keySources: fallbackSources.slice(0, 8).map((source) => ({
+      id: String(source?._id || source?.id || '').trim(),
+      title: String(source?.title || '').trim(),
+      year: Number(source?.year) || null,
+      url: String(source?.url || '').trim()
+    }))
   };
 }
 
@@ -415,4 +518,49 @@ export async function generateFromLlm(payload) {
       details: error.message
     };
   }
+}
+
+export async function retrievePdfContext({ query, sessionId, topK = 6, focusAbnormal = false }) {
+  const payload = {
+    query: String(query || '').trim(),
+    session_id: String(sessionId || '').trim(),
+    top_k: Number.isFinite(Number(topK)) ? Number(topK) : 6,
+    focus_abnormal: Boolean(focusAbnormal)
+  };
+
+  if (!payload.query || !payload.session_id) {
+    return {
+      chunks: [],
+      context_text: '',
+      source_docs: [],
+      has_pdf_context: false
+    };
+  }
+
+  const { data } = await llmClient.post('/pdf/retrieve', payload, { timeout: 30000 });
+  return data || {
+    chunks: [],
+    context_text: '',
+    source_docs: [],
+    has_pdf_context: false
+  };
+}
+
+export async function callFusedLLM(payload = {}) {
+  const request = {
+    system_prompt: String(payload.system_prompt || payload.systemPrompt || '').trim(),
+    user_prompt: String(payload.user_prompt || payload.userPrompt || '').trim(),
+    session_id: String(payload.session_id || payload.sessionId || '').trim(),
+    pdf_context: payload.pdf_context || payload.pdfContext || null,
+    research_context: payload.research_context || payload.researchContext || null,
+    conversation_history: Array.isArray(payload.conversation_history || payload.conversationHistory)
+      ? (payload.conversation_history || payload.conversationHistory)
+      : [],
+    temperature: Number(payload.temperature ?? 0.3),
+    max_tokens: Number(payload.max_tokens ?? payload.maxTokens ?? 2048),
+    model: String(payload.model || 'llama-3.3-70b-versatile')
+  };
+
+  const { data } = await llmClient.post('/generate/fused', request, { timeout: 120000 });
+  return data;
 }

@@ -1,10 +1,13 @@
 import express from 'express';
 import mongoose from 'mongoose';
+import axios from 'axios';
 import Session from '../models/Session.js';
 import Message from '../models/Message.js';
 import SourceDoc from '../models/SourceDoc.js';
 import Analytics from '../models/Analytics.js';
+import logger from '../lib/logger.js';
 import { buildInsightsPayload } from '../services/sessionInsights.js';
+import { generateSessionBrief } from '../services/briefGenerator.js';
 import {
   insightsResponseCache,
   invalidateInsightsCache,
@@ -15,6 +18,7 @@ import { invalidateSessionQueryCache } from '../services/queryResultCache.js';
 const router = express.Router();
 export const bookmarksRouter = express.Router();
 const ALLOWED_SEX_VALUES = new Set(['Male', 'Female', 'Other']);
+const LLM_SERVICE_URL = String(process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001').replace(/\/+$/, '');
 
 function normalizeText(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -50,10 +54,18 @@ function normalizeDemographics(value) {
     sex = canonicalSex;
   }
 
+  const ageRange = normalizeText(input.ageRange);
+  const conditions = (Array.isArray(input.conditions) ? input.conditions : String(input.conditions || '').split(','))
+    .map((entry) => normalizeText(entry))
+    .filter(Boolean)
+    .slice(0, 10);
+
   return {
     value: {
       age,
-      sex
+      ageRange,
+      sex,
+      conditions
     }
   };
 }
@@ -245,6 +257,71 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+router.patch('/:id', async (req, res, next) => {
+  try {
+    if (!hasValidSessionId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
+
+    const existingSession = await Session.findById(req.params.id);
+    if (!existingSession) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const updates = {};
+
+    if (req.body?.intent !== undefined) {
+      updates.intent = normalizeText(req.body.intent);
+    }
+
+    if (req.body?.location !== undefined) {
+      const incomingLocation = req.body.location && typeof req.body.location === 'object'
+        ? req.body.location
+        : {};
+      const mergedLocation = {
+        ...(existingSession.location || {}),
+        ...incomingLocation
+      };
+      updates.location = normalizeLocation(mergedLocation);
+    }
+
+    if (req.body?.demographics !== undefined) {
+      const incomingDemographics = req.body.demographics && typeof req.body.demographics === 'object'
+        ? req.body.demographics
+        : {};
+      const mergedDemographics = {
+        ...(existingSession.demographics || {}),
+        ...incomingDemographics
+      };
+      const demographicsResult = normalizeDemographics(mergedDemographics);
+      if (demographicsResult.error) {
+        return res.status(400).json({ error: demographicsResult.error });
+      }
+
+      updates.demographics = demographicsResult.value;
+    }
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ error: 'No valid session fields provided for update.' });
+    }
+
+    updates.updatedAt = new Date();
+
+    if (updates.intent !== undefined) {
+      updates.title = `${existingSession.disease}${updates.intent ? ` - ${updates.intent}` : ''}`;
+    }
+
+    const session = await Session.findByIdAndUpdate(req.params.id, updates, { new: true });
+
+    invalidateInsightsCache(req.params.id);
+    invalidateSessionQueryCache(req.params.id);
+
+    return res.json({ session });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.get('/history/search', async (req, res, next) => {
   try {
     const query = normalizeText(req.query.q);
@@ -361,6 +438,130 @@ router.get('/:id', async (req, res, next) => {
     const messages = await Message.find({ sessionId: req.params.id }).sort({ createdAt: 1 });
 
     return res.json({ session, messages });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get('/:id/conflicts', async (req, res, next) => {
+  try {
+    if (!hasValidSessionId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
+
+    const sessionExists = await Session.exists({ _id: req.params.id });
+    if (!sessionExists) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const assistantMessages = await Message.find(
+      {
+        sessionId: req.params.id,
+        role: 'assistant',
+        conflicts: { $exists: true, $ne: [] }
+      },
+      { conflicts: 1, createdAt: 1 }
+    )
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const severityPriority = { low: 1, medium: 2, high: 3 };
+    const outcomeMap = new Map();
+    let totalConflicts = 0;
+
+    assistantMessages.forEach((message) => {
+      (message?.conflicts || []).forEach((conflict) => {
+        const outcomePhrase = normalizeText(conflict?.outcomePhrase);
+        if (!outcomePhrase) {
+          return;
+        }
+
+        totalConflicts += 1;
+
+        if (!outcomeMap.has(outcomePhrase)) {
+          outcomeMap.set(outcomePhrase, {
+            outcomePhrase,
+            count: 0,
+            sources: [],
+            maxSeverity: 'low',
+            maxConflictScore: 0
+          });
+        }
+
+        const group = outcomeMap.get(outcomePhrase);
+        group.count += 1;
+        group.maxConflictScore = Math.max(group.maxConflictScore, Number(conflict?.conflictScore || 0));
+
+        if (
+          severityPriority[String(conflict?.severity || 'low')] >
+          severityPriority[group.maxSeverity]
+        ) {
+          group.maxSeverity = String(conflict?.severity || 'low');
+        }
+
+        const sourceA =
+          conflict?.sourceA && typeof conflict.sourceA === 'object'
+            ? conflict.sourceA
+            : { title: String(conflict?.sourceA || '') };
+        const sourceB =
+          conflict?.sourceB && typeof conflict.sourceB === 'object'
+            ? conflict.sourceB
+            : { title: String(conflict?.sourceB || '') };
+
+        group.sources.push({
+          sourceA: sourceA.title || null,
+          sourceB: sourceB.title || null,
+          conflictScore: Number(conflict?.conflictScore || 0),
+          severity: String(conflict?.severity || 'low'),
+          timestamp: message?.createdAt || null
+        });
+      });
+    });
+
+    const outcomeGroups = Array.from(outcomeMap.values())
+      .sort((left, right) => right.maxConflictScore - left.maxConflictScore)
+      .map((group) => ({
+        outcomePhrase: group.outcomePhrase,
+        count: group.count,
+        sources: group.sources,
+        maxSeverity: group.maxSeverity
+      }));
+
+    return res.json({ totalConflicts, outcomeGroups });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post('/:id/brief/generate', async (req, res, next) => {
+  try {
+    if (!hasValidSessionId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
+
+    const brief = await generateSessionBrief(req.params.id);
+    return res.json({ brief, version: Number(brief?.version || 0) });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get('/:id/brief', async (req, res, next) => {
+  try {
+    if (!hasValidSessionId(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid session id' });
+    }
+
+    const session = await Session.findById(req.params.id).select('brief').lean();
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (!session?.brief?.generatedAt) {
+      return res.status(404).json({ error: 'Brief has not been generated yet.' });
+    }
+
+    return res.json({ brief: session.brief });
   } catch (err) {
     return next(err);
   }
@@ -503,30 +704,6 @@ router.get('/:id/sources/:messageId', async (req, res, next) => {
   }
 });
 
-router.get('/:id/insights', async (req, res, next) => {
-  try {
-    if (!hasValidSessionId(req.params.id)) {
-      return res.status(400).json({ error: 'Invalid session id' });
-    }
-
-    const sessionExists = await Session.exists({ _id: req.params.id });
-    if (!sessionExists) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
-
-    const cachedInsights = getCachedSessionInsights(req.params.id);
-    if (cachedInsights) {
-      return res.json(cachedInsights);
-    }
-
-    const insights = await buildSessionInsights(req.params.id);
-    setCachedSessionInsights(req.params.id, insights);
-    return res.json(insights);
-  } catch (err) {
-    return next(err);
-  }
-});
-
 router.get('/', async (req, res, next) => {
   try {
     const sessions = await Session.find()
@@ -558,6 +735,12 @@ router.delete('/:id', async (req, res, next) => {
 
     invalidateInsightsCache(req.params.id);
     invalidateSessionQueryCache(req.params.id);
+
+    void axios
+      .delete(`${LLM_SERVICE_URL}/pdf/session/${req.params.id}`, { timeout: 15000 })
+      .catch((error) => {
+        logger.warn(`Session ${req.params.id} deleted but PDF store cleanup failed: ${error?.message || error}`);
+      });
 
     return res.json({ message: 'Session deleted' });
   } catch (err) {

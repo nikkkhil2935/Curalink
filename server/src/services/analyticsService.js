@@ -71,7 +71,7 @@ async function fetchTopIntents(limit = 5) {
 async function fetchDailyActivity(days = 14) {
   const { keys, startDate } = buildDateRange(days);
 
-  const [sessionRows, queryRows] = await Promise.all([
+  const [sessionRows, queryRows, conflictRows] = await Promise.all([
     Session.aggregate([
       { $match: { createdAt: { $gte: startDate } } },
       {
@@ -97,6 +97,21 @@ async function fetchDailyActivity(days = 14) {
             }
           },
           queries: { $sum: 1 }
+        }
+      }
+    ]),
+    Analytics.aggregate([
+      { $match: { event: 'conflict_detected', createdAt: { $gte: startDate } } },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$createdAt'
+            }
+          },
+          conflicts: { $sum: { $ifNull: ['$metadata.conflictCount', 1] } },
+          conflictEvents: { $sum: 1 }
         }
       }
     ])
@@ -125,11 +140,26 @@ async function fetchDailyActivity(days = 14) {
   }
 
   const sessionCounts = new Map(sessionRows.map((row) => [String(row._id), Number(row.sessions || 0)]));
+  const conflictCounts = new Map(
+    conflictRows.map((row) => [
+      String(row._id),
+      {
+        conflicts: Number(row.conflicts || 0),
+        conflictEvents: Number(row.conflictEvents || 0)
+      }
+    ])
+  );
 
   return keys.map((date) => ({
     date,
     sessions: sessionCounts.get(date) || 0,
-    queries: queryCounts.get(date) || 0
+    queries: queryCounts.get(date) || 0,
+    conflicts: conflictCounts.get(date)?.conflicts || 0,
+    conflict_events: conflictCounts.get(date)?.conflictEvents || 0,
+    conflict_rate:
+      (queryCounts.get(date) || 0) > 0
+        ? Number((((conflictCounts.get(date)?.conflicts || 0) / (queryCounts.get(date) || 1)) * 100).toFixed(2))
+        : 0
   }));
 }
 
@@ -204,14 +234,26 @@ export async function getAnalyticsOverview(options = {}) {
   ]);
 
   const latency = buildLatencySummary(latencyValues);
+  const totalConflicts = dailyActivity.reduce((sum, day) => sum + Number(day.conflicts || 0), 0);
+  const totalConflictEvents = dailyActivity.reduce((sum, day) => sum + Number(day.conflict_events || 0), 0);
+  const conflictRate = totalQueries > 0 ? Number(((totalConflicts / totalQueries) * 100).toFixed(2)) : 0;
+  const dailyConflicts = dailyActivity.map((day) => ({
+    date: day.date,
+    conflicts: day.conflicts,
+    conflict_rate: day.conflict_rate
+  }));
 
   return {
     total_sessions: totalSessions,
     total_queries: totalQueries,
+    total_conflicts: totalConflicts,
+    conflict_events: totalConflictEvents,
+    conflict_rate: conflictRate,
     avg_latency_ms: latency.avg_latency_ms,
     p95_latency_ms: latency.p95_latency_ms,
     top_intents: topIntents,
     daily_activity: dailyActivity,
+    daily_conflicts: dailyConflicts,
     source_distribution: sourceDistribution.map((entry) => ({
       source: entry.source,
       count: entry.count,
@@ -221,6 +263,9 @@ export async function getAnalyticsOverview(options = {}) {
     // Legacy shape maintained for existing analytics page consumers.
     totalSessions: totalSessions,
     totalQueries: totalQueries,
+    totalConflicts,
+    conflictRate,
+    dailyConflicts,
     totalSources: totalSources,
     avgCandidatesRetrieved: Math.round(Number(legacyCandidateAverages?.avgCandidates || 0)),
     avgShownToUser: Math.round(Number(legacyCandidateAverages?.avgReranked || 0)),

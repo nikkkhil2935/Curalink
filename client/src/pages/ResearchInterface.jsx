@@ -8,7 +8,7 @@ import HistoryCommandPalette from '@/components/features/HistoryCommandPalette.j
 import LoadingOverlay from '@/components/ui/LoadingOverlay.jsx';
 import ErrorBanner from '@/components/ui/ErrorBanner.jsx';
 import { useAppStore } from '@/store/useAppStore.js';
-import { api, extractApiError } from '@/utils/api.js';
+import { api, extractApiError, getSessionPDFDocs } from '@/utils/api.js';
 import { cn } from '@/lib/utils.js';
 
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -24,6 +24,9 @@ export default function ResearchInterface() {
     setSession,
     setMessages,
     setSources,
+    setSessionConflicts,
+    setLivingBrief,
+    setSessionUploadedDocs,
     setLoading,
     setSelectedAssistantMessage,
     setHighlightedMessage
@@ -74,6 +77,33 @@ export default function ResearchInterface() {
   };
 
   useEffect(() => {
+    const onGlobalShortcut = (event) => {
+      const target = event.target;
+      const isEditableTarget =
+        target instanceof HTMLElement &&
+        (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+
+      if (isEditableTarget || !event.altKey) {
+        return;
+      }
+
+      if (event.key === '1') {
+        event.preventDefault();
+        setMobileTab('chat');
+      } else if (event.key === '2') {
+        event.preventDefault();
+        setMobileTab('evidence');
+      } else if (event.key === '3') {
+        event.preventDefault();
+        setMobileTab('sidebar');
+      }
+    };
+
+    window.addEventListener('keydown', onGlobalShortcut);
+    return () => window.removeEventListener('keydown', onGlobalShortcut);
+  }, []);
+
+  useEffect(() => {
     let isMounted = true;
 
     if (!sessionId) {
@@ -90,6 +120,7 @@ export default function ResearchInterface() {
       setSelectedAssistantMessage(null);
       setHighlightedMessage(null);
       setSources([]);
+      setSessionUploadedDocs([]);
 
       try {
         const { data: sessionData } = await api.get(`/sessions/${sessionId}`);
@@ -99,6 +130,40 @@ export default function ResearchInterface() {
         }
 
         setSession(sessionData.session);
+        void Promise.allSettled([
+          api.get(`/sessions/${sessionId}/conflicts`),
+          api.get(`/sessions/${sessionId}/brief`),
+          getSessionPDFDocs(sessionId)
+        ]).then((results) => {
+          if (!isMounted) {
+            return;
+          }
+
+          const [conflictsResult, briefResult, pdfDocsResult] = results;
+          if (conflictsResult?.status === 'fulfilled') {
+            const payload = conflictsResult.value?.data || {};
+            setSessionConflicts({
+              totalConflicts: Number(payload?.totalConflicts || 0),
+              outcomeGroups: Array.isArray(payload?.outcomeGroups) ? payload.outcomeGroups : []
+            });
+          } else {
+            setSessionConflicts({ totalConflicts: 0, outcomeGroups: [] });
+          }
+
+          if (briefResult?.status === 'fulfilled') {
+            setLivingBrief(briefResult.value?.data?.brief || null);
+          } else {
+            setLivingBrief(null);
+          }
+
+          if (pdfDocsResult?.status === 'fulfilled') {
+            const docs = Array.isArray(pdfDocsResult.value?.data?.docs) ? pdfDocsResult.value.data.docs : [];
+            setSessionUploadedDocs(docs);
+          } else {
+            setSessionUploadedDocs([]);
+          }
+        });
+
         const messages = sessionData.messages || [];
         setMessages(messages);
 
@@ -147,8 +212,11 @@ export default function ResearchInterface() {
     sessionId,
     setHighlightedMessage,
     setLoading,
+    setLivingBrief,
     setMessages,
+    setSessionUploadedDocs,
     setSelectedAssistantMessage,
+    setSessionConflicts,
     setSession,
     setSources
   ]);

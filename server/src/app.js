@@ -13,6 +13,7 @@ import sessionRoutes, { bookmarksRouter } from './routes/sessions.js';
 import queryRoutes from './routes/query.js';
 import analyticsRoutes from './routes/analytics.js';
 import exportRoutes from './routes/export.js';
+import pdfRoutes from './routes/pdf.js';
 import { startAnalyticsScheduler, stopAnalyticsScheduler } from './services/scheduler.js';
 import logger from './lib/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -223,9 +224,22 @@ app.use('/api', (req, res, next) => {
 
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/sessions', exportRoutes);
+app.use('/api/sessions', pdfRoutes);
 app.use('/api', bookmarksRouter);
 app.use('/api', queryRoutes);
 app.use('/api/analytics', analyticsRoutes);
+
+app.use((err, req, res, next) => {
+  if (err?.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'File too large. Maximum size is 20MB.' });
+  }
+
+  if (err?.message === 'Only PDF files are allowed') {
+    return res.status(422).json({ error: err.message });
+  }
+
+  return next(err);
+});
 
 function normalizeServiceStatus(value, fallback = 'offline') {
   const normalized = String(value || '').trim().toLowerCase();

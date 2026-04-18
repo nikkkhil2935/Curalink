@@ -1,7 +1,9 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Activity, Beaker, ArrowRight } from 'lucide-react';
 import Button from '@/components/ui/Button.jsx';
+import ThemeToggle from '@/components/ui/ThemeToggle.jsx';
 import { cn } from '@/lib/utils.js';
+import { useAppStore } from '@/store/useAppStore.js';
 
 const NAV_ITEMS = [
   { to: '/', label: 'Research', icon: Beaker },
@@ -15,6 +17,8 @@ export default function AppTopNav({
   showPrimaryAction = true
 }) {
   const navigate = useNavigate();
+  const currentSession = useAppStore((state) => state.currentSession);
+  const sessionConflicts = useAppStore((state) => state.sessionConflicts);
 
   return (
     <header
@@ -31,7 +35,7 @@ export default function AppTopNav({
             type="button"
             onClick={() => navigate('/')}
             aria-label="Open Curalink home"
-            className="group flex items-center gap-2 rounded-md border border-transparent px-1 py-1 token-text focus-visible:border-(--accent)"
+            className="group inline-flex items-center gap-2 rounded-md border border-transparent px-1 py-1 token-text focus-visible:border-(--accent)"
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-(--accent) font-bold text-white shadow-sm transition-transform duration-150 ease-out group-hover:scale-105">
               C
@@ -47,7 +51,7 @@ export default function AppTopNav({
                   to={item.to}
                   className={({ isActive }) =>
                     cn(
-                      'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium',
+                      'flex items-center gap-2 rounded-lg border px-3.5 py-2.5 text-[13px] font-medium',
                       'duration-150 ease-out',
                       isActive
                         ? 'border-(--accent) bg-(--accent-soft) text-(--accent)'
@@ -64,6 +68,16 @@ export default function AppTopNav({
         </div>
 
         <div className="flex items-center gap-3">
+          <ThemeToggle className="inline-flex" />
+
+          {currentSession?._id ? (
+            <div className="hidden items-center gap-2 rounded-lg border token-border token-surface-2 px-3 py-1.5 text-sm md:inline-flex">
+              <span className="font-semibold token-text">{currentSession.disease || 'Session'}</span>
+              <span className="token-text-subtle">|</span>
+              <span className="token-text-muted">Conflicts: {Number(sessionConflicts?.totalConflicts || 0)}</span>
+            </div>
+          ) : null}
+
           {showPrimaryAction ? (
             <Button
               onClick={() => {
@@ -72,7 +86,7 @@ export default function AppTopNav({
               size="sm"
               variant="primary"
               aria-label="Start a new research session"
-              className="hidden gap-2 rounded-lg px-4 text-xs font-semibold tracking-wide sm:inline-flex"
+              className="hidden gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold sm:inline-flex"
             >
               New Session
               <ArrowRight className="h-4 w-4" aria-hidden="true" />

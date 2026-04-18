@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["client/src/*"],
+      "@components/*": ["client/src/components/*"],
+      "@hooks/*": ["client/src/hooks/*"],
+      "@lib/*": ["client/src/lib/*"],
+      "@pages/*": ["client/src/pages/*"],
+      "@store/*": ["client/src/store/*"],
+      "@utils/*": ["client/src/utils/*"]
+    }
+  }
+}

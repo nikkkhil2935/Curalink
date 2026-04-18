@@ -1,4 +1,6 @@
 import React from 'react';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card.jsx';
+import { useAppStore } from '@/store/useAppStore.js';
 
 const strengthConfig = {
   LIMITED: {
@@ -61,11 +63,46 @@ function parseInsightContent(rawInsight) {
 }
 
 export default function StructuredAnswer({ answer, stats }) {
+  const sessionUploadedDocs = useAppStore((state) => state.sessionUploadedDocs);
+  const firstDoc = Array.isArray(sessionUploadedDocs) ? sessionUploadedDocs[0] : null;
+
   const insightIcons = {
     TREATMENT: 'Tx', DIAGNOSIS: 'Dx', RISK: 'Risk', PREVENTION: 'Prev', GENERAL: 'Info'
   };
+
+  const demographicFlags = Array.isArray(answer?.demographicFlags)
+    ? answer.demographicFlags.map((flag) => String(flag || '').trim()).filter(Boolean)
+    : [];
   
   const evidence = strengthConfig[answer.evidence_strength] || strengthConfig.MODERATE;
+
+  const renderCitation = (citationId, key) => {
+    const normalized = String(citationId || '').toUpperCase();
+    if (normalized === 'DOC') {
+      return (
+        <HoverCard key={key}>
+          <HoverCardTrigger asChild>
+            <span className="cursor-help rounded-md border border-[color-mix(in_srgb,var(--warning)_45%,transparent)] bg-[color-mix(in_srgb,var(--warning)_15%,var(--bg-surface))] px-2 py-0.5 text-xs font-mono text-(--warning)">
+              [DOC]
+            </span>
+          </HoverCardTrigger>
+          <HoverCardContent className="w-72 border token-border token-surface p-3 text-xs token-text">
+            <p className="mb-1 font-semibold token-text">From your uploaded document</p>
+            <p className="token-text-muted">
+              {firstDoc?.filename ? `${firstDoc.filename}` : 'Uploaded PDF document'}
+              {firstDoc?.document_type ? ` (${String(firstDoc.document_type).replace(/_/g, ' ')})` : ''}
+            </p>
+          </HoverCardContent>
+        </HoverCard>
+      );
+    }
+
+    return (
+      <span key={key} className="text-xs font-mono text-(--accent)">
+        [{normalized}]
+      </span>
+    );
+  };
 
   return (
     <div className="flex flex-col space-y-4 w-full">
@@ -86,6 +123,22 @@ export default function StructuredAnswer({ answer, stats }) {
           <p className="text-sm leading-relaxed token-text">{answer.condition_overview}</p>
         </section>
       )}
+
+      {demographicFlags.length > 0 ? (
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider token-text-subtle">Evidence Gaps Flagged</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {demographicFlags.map((flag) => (
+              <span
+                key={flag}
+                className="rounded-full border border-[color-mix(in_srgb,var(--warning)_35%,transparent)] bg-[color-mix(in_srgb,var(--warning)_12%,var(--bg-surface))] px-2 py-0.5 text-[11px] font-medium text-(--warning)"
+              >
+                {flag}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {answer.research_insights?.length > 0 && (
         <section className="space-y-3">
@@ -123,7 +176,7 @@ export default function StructuredAnswer({ answer, stats }) {
 
                         <div className="inline-flex flex-wrap gap-1">
                           {ri.source_ids?.map((id, j) => (
-                            <span key={j} className="text-xs font-mono text-(--accent)">[{id}]</span>
+                            renderCitation(id, `${id}-${j}`)
                           ))}
                         </div>
                       </>
@@ -152,7 +205,7 @@ export default function StructuredAnswer({ answer, stats }) {
                 {ct.contact && <p className="border-t token-border pt-1 text-xs token-text-subtle">Contact: {ct.contact}</p>}
                 <div className="mt-2 inline-flex flex-wrap gap-1">
                   {(ct.source_ids || []).map((id, j) => (
-                    <span key={j} className="text-xs font-mono text-(--accent)">[{String(id).toUpperCase()}]</span>
+                    renderCitation(id, `trial-${id}-${j}`)
                   ))}
                 </div>
               </div>

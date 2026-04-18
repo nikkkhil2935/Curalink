@@ -30,7 +30,13 @@ function computeCitationBoost(doc) {
   return Math.min(0.2, doc.citedByCount / 1000);
 }
 
-export function rerankCandidates(candidates, queryTerms, intentType, userLocation = null) {
+export function rerankCandidates(
+  candidates,
+  queryTerms,
+  intentType,
+  userLocation = null,
+  boostOverrides = null
+) {
   const WEIGHTS = {
     TREATMENT: { relevance: 0.5, recency: 0.3, location: 0.1, credibility: 0.1 },
     CLINICAL_TRIALS: { relevance: 0.35, recency: 0.2, location: 0.3, credibility: 0.15 },
@@ -42,6 +48,10 @@ export function rerankCandidates(candidates, queryTerms, intentType, userLocatio
   };
 
   const weights = WEIGHTS[intentType] || WEIGHTS.GENERAL;
+  const geographicBoost = Number(boostOverrides?.geographicBoost || 1);
+  const recencyBoost = Number(boostOverrides?.recencyBoost || 1);
+  const demographicFilter = String(boostOverrides?.demographicFilter || '').toLowerCase();
+  const currentYear = new Date().getFullYear();
 
   const scored = candidates.map((doc) => {
     const keywordScore = computeKeywordScore(doc, queryTerms);
@@ -60,10 +70,23 @@ export function rerankCandidates(candidates, queryTerms, intentType, userLocatio
     const citationBoost = computeCitationBoost(doc);
     const recruitingBoost = doc.type === 'trial' && doc.status === 'RECRUITING' ? 0.1 : 0;
 
+    const isRecent = Number(doc.year) && Number(doc.year) >= currentYear - 5;
+    const boostedRecencyScore = (doc.recencyScore || 0) * (isRecent ? recencyBoost : 1);
+    const boostedLocationScore = locationScore * geographicBoost;
+
+    let demographicBoost = 1;
+    if (demographicFilter.includes('pediatric')) {
+      const text = `${doc.title || ''} ${doc.abstract || ''}`.toLowerCase();
+      demographicBoost = /(pediatric|children|adolescent|childhood)/.test(text) ? 1.12 : 0.96;
+    } else if (demographicFilter.includes('geriatric')) {
+      const text = `${doc.title || ''} ${doc.abstract || ''}`.toLowerCase();
+      demographicBoost = /(geriatric|elderly|older adults|senior)/.test(text) ? 1.1 : 0.97;
+    }
+
     const finalScore =
       weights.relevance * keywordScore +
-      weights.recency * (doc.recencyScore || 0) +
-      weights.location * locationScore +
+      weights.recency * boostedRecencyScore +
+      weights.location * boostedLocationScore +
       weights.credibility * (doc.sourceCredibility || 0) +
       citationBoost +
       recruitingBoost;
@@ -72,7 +95,7 @@ export function rerankCandidates(candidates, queryTerms, intentType, userLocatio
       ...doc,
       relevanceScore: keywordScore,
       locationScore,
-      finalScore
+      finalScore: finalScore * demographicBoost
     };
   });
 

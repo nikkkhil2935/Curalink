@@ -50,10 +50,27 @@ function normalizeSession(sessionDoc) {
     location: sessionDoc.location || {},
     demographics: sessionDoc.demographics || {},
     title: sessionDoc.title || '',
+    brief: normalizeBrief(sessionDoc.brief),
     queryHistory: Array.isArray(sessionDoc.queryHistory) ? sessionDoc.queryHistory : [],
     messageCount: Number(sessionDoc.messageCount || 0),
     createdAt: sessionDoc.createdAt || null,
     updatedAt: sessionDoc.updatedAt || null
+  };
+}
+
+function normalizeBrief(brief) {
+  if (!brief || typeof brief !== 'object') {
+    return null;
+  }
+
+  return {
+    generatedAt: brief.generatedAt || null,
+    background: String(brief.background || ''),
+    currentEvidence: String(brief.currentEvidence || ''),
+    conflicts: String(brief.conflicts || ''),
+    openQuestions: String(brief.openQuestions || ''),
+    keySources: Array.isArray(brief.keySources) ? brief.keySources : [],
+    version: Number(brief.version || 0)
   };
 }
 
@@ -169,9 +186,34 @@ function escapeCsvValue(value) {
 
 export function buildCsvExport(payload) {
   const rows = flattenEvidenceRows(payload?.evidence || []);
+  const brief = payload?.session?.brief;
   const header = ['id', 'title', 'type', 'relevance_score', 'url'];
 
-  const csvRows = [header.join(',')];
+  const csvRows = [];
+
+  if (brief?.generatedAt) {
+    csvRows.push(['section', 'label', 'value'].join(','));
+    csvRows.push(['brief', 'generated_at', escapeCsvValue(String(brief.generatedAt))].join(','));
+    csvRows.push(['brief', 'version', escapeCsvValue(String(brief.version || 0))].join(','));
+    csvRows.push(['brief', 'background', escapeCsvValue(brief.background || '')].join(','));
+    csvRows.push(['brief', 'current_evidence', escapeCsvValue(brief.currentEvidence || '')].join(','));
+    csvRows.push(['brief', 'conflicts', escapeCsvValue(brief.conflicts || '')].join(','));
+    csvRows.push(['brief', 'open_questions', escapeCsvValue(brief.openQuestions || '')].join(','));
+
+    (brief.keySources || []).forEach((entry, index) => {
+      csvRows.push(
+        [
+          'brief_key_source',
+          String(index + 1),
+          escapeCsvValue(`${entry?.id || ''} | ${entry?.title || ''} | ${entry?.year || ''} | ${entry?.url || ''}`)
+        ].join(',')
+      );
+    });
+
+    csvRows.push('');
+  }
+
+  csvRows.push(header.join(','));
   rows.forEach((row) => {
     csvRows.push(
       [
@@ -190,6 +232,7 @@ export function buildCsvExport(payload) {
 function buildPdfLines(payload) {
   const lines = [];
   const session = payload?.session || {};
+  const brief = session?.brief;
   const messages = Array.isArray(payload?.messages) ? payload.messages : [];
   const evidence = Array.isArray(payload?.evidence) ? payload.evidence : [];
   const timings = Array.isArray(payload?.timings) ? payload.timings : [];
@@ -200,6 +243,32 @@ function buildPdfLines(payload) {
   lines.push(`Intent: ${toAsciiLine(session.intent || 'Not specified')}`);
   lines.push(`Exported At: ${toAsciiLine(payload?.exportedAt || new Date().toISOString())}`);
   lines.push('');
+
+  if (brief?.generatedAt) {
+    lines.push('Living Research Brief');
+    lines.push(`Version: ${Number(brief.version || 0)} | Generated: ${toAsciiLine(brief.generatedAt)}`);
+    if (brief.background) {
+      lines.push(`Background: ${toAsciiLine(truncate(brief.background, 260))}`);
+    }
+    if (brief.currentEvidence) {
+      lines.push(`Current Evidence: ${toAsciiLine(truncate(brief.currentEvidence, 260))}`);
+    }
+    if (brief.conflicts) {
+      lines.push(`Conflicts: ${toAsciiLine(truncate(brief.conflicts, 260))}`);
+    }
+    if (brief.openQuestions) {
+      lines.push(`Open Questions: ${toAsciiLine(truncate(brief.openQuestions, 260))}`);
+    }
+    if (Array.isArray(brief.keySources) && brief.keySources.length) {
+      lines.push('Brief Key Sources:');
+      brief.keySources.slice(0, 5).forEach((entry, index) => {
+        lines.push(
+          `${index + 1}. ${toAsciiLine(truncate(entry?.title || entry?.id || 'Untitled source', 90))}${entry?.year ? ` (${entry.year})` : ''}`
+        );
+      });
+    }
+    lines.push('');
+  }
 
   lines.push(`Messages: ${messages.length}`);
   lines.push(`Evidence Sources: ${evidence.length}`);
@@ -308,12 +377,51 @@ async function renderPdfWithPdfKit(payload) {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
 
       const session = payload?.session || {};
+      const brief = session?.brief;
       doc.fontSize(18).text('Curalink Session Export');
       doc.moveDown(0.5);
       doc.fontSize(11).text(`Condition: ${session.disease || 'Unknown'}`);
       doc.text(`Session: ${session.title || session.id || 'Unknown'}`);
       doc.text(`Exported At: ${payload?.exportedAt || new Date().toISOString()}`);
       doc.moveDown();
+
+      if (brief?.generatedAt) {
+        doc.fontSize(13).text('Living Research Brief');
+        doc.fontSize(10).text(`Version: ${Number(brief.version || 0)} | Generated: ${brief.generatedAt}`);
+        if (brief.background) {
+          doc.moveDown(0.3);
+          doc.fontSize(11).text('Background');
+          doc.fontSize(10).text(brief.background);
+        }
+        if (brief.currentEvidence) {
+          doc.moveDown(0.3);
+          doc.fontSize(11).text('Current Evidence');
+          doc.fontSize(10).text(brief.currentEvidence);
+        }
+        if (brief.conflicts) {
+          doc.moveDown(0.3);
+          doc.fontSize(11).text('Conflicts');
+          doc.fontSize(10).text(brief.conflicts);
+        }
+        if (brief.openQuestions) {
+          doc.moveDown(0.3);
+          doc.fontSize(11).text('Open Questions');
+          doc.fontSize(10).text(brief.openQuestions);
+        }
+        if (Array.isArray(brief.keySources) && brief.keySources.length) {
+          doc.moveDown(0.3);
+          doc.fontSize(11).text('Key Sources');
+          brief.keySources.slice(0, 8).forEach((entry, index) => {
+            doc
+              .fontSize(10)
+              .text(
+                `${index + 1}. ${truncate(entry?.title || entry?.id || 'Untitled source', 95)}${entry?.year ? ` (${entry.year})` : ''}`
+              );
+          });
+        }
+
+        doc.moveDown();
+      }
 
       doc.fontSize(13).text('Top Evidence');
       (payload?.evidence || []).slice(0, 12).forEach((item, index) => {

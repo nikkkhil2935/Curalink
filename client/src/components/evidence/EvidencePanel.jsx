@@ -7,6 +7,8 @@ import ResearchersTab from './ResearchersTab';
 import TimelineTab from './TimelineTab';
 import { cn } from '@/lib/utils.js';
 import EvidenceConfidenceHeatmap from '@/components/features/EvidenceConfidenceHeatmap.jsx';
+import ConflictAlert from '@/components/features/ConflictAlert.jsx';
+import ConflictExplorerSheet from '@/components/features/ConflictExplorerSheet.jsx';
 import { api } from '@/utils/api.js';
 
 export default function EvidencePanel() {
@@ -18,11 +20,14 @@ export default function EvidencePanel() {
     messages,
     selectedAssistantMessageId,
     sourcesByMessageId,
+    conflictsByMessageId,
+    sessionConflicts,
     setSources,
     setSelectedAssistantMessage,
     setHighlightedMessage
   } = useAppStore();
   const [timelineLoadingId, setTimelineLoadingId] = useState('');
+  const [isConflictExplorerOpen, setIsConflictExplorerOpen] = useState(false);
 
   const pubCount = sources.filter(s => s.type === 'publication').length;
   const trialCount = sources.filter(s => s.type === 'trial').length;
@@ -39,6 +44,15 @@ export default function EvidencePanel() {
     const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant');
     return latestAssistant?.intentType || null;
   }, [messages, selectedAssistantMessageId]);
+
+  const selectedConflicts = useMemo(() => {
+    if (!selectedAssistantMessageId) {
+      return [];
+    }
+
+    const conflicts = conflictsByMessageId?.[String(selectedAssistantMessageId)];
+    return Array.isArray(conflicts) ? conflicts : [];
+  }, [conflictsByMessageId, selectedAssistantMessageId]);
 
   useEffect(() => {
     if (selectedAssistantIntent === 'CLINICAL_TRIALS' && trialCount > 0 && activeTab !== 'trials') {
@@ -96,7 +110,17 @@ export default function EvidencePanel() {
       </div>
       
       <div className="scrollbar-thin min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-        <EvidenceConfidenceHeatmap sources={sources} />
+        {(selectedConflicts.length > 0 || Number(sessionConflicts?.totalConflicts || 0) > 0) ? (
+          <ConflictAlert
+            conflicts={selectedConflicts}
+            totalConflicts={selectedConflicts.length > 0 ? selectedConflicts.length : sessionConflicts?.totalConflicts}
+            onOpenExplorer={() => {
+              setIsConflictExplorerOpen(true);
+            }}
+          />
+        ) : null}
+
+        <EvidenceConfidenceHeatmap sources={sources} conflicts={selectedConflicts} />
 
         {activeTab === 'publications' ? (
           <div id="evidence-panel-publications" role="tabpanel" aria-labelledby="evidence-tab-publications">
@@ -124,6 +148,12 @@ export default function EvidencePanel() {
           </div>
         ) : null}
       </div>
+
+      <ConflictExplorerSheet
+        sessionId={sessionId}
+        open={isConflictExplorerOpen}
+        onOpenChange={setIsConflictExplorerOpen}
+      />
     </div>
   );
 }

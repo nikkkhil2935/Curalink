@@ -37,6 +37,43 @@
   --panel-shadow: 0 20px 42px -28px rgba(14, 40, 78, 0.34);
   --focus-ring: color-mix(in srgb, var(--accent) 42%, transparent);
   --motion-fast: 150ms;
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-surface-2: var(--bg-surface-2);
+  --color-surface-3: var(--bg-surface-3);
+  --color-border: var(--border-subtle);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-gray-950: #08111f;
+  --color-gray-900: #111f33;
+  --color-gray-800: #1a2f48;
+  --color-gray-700: #224163;
+  --color-gray-600: #345678;
+  --color-gray-500: #4b6a89;
+  --color-gray-400: #6381a0;
+  --color-gray-300: #88a5c3;
+  --color-gray-200: #b1c7dd;
+  --color-gray-100: #d8e7f8;
+  --bg-canvas: #09111d;
+  --bg-surface: #101b2b;
+  --bg-surface-2: #152337;
+  --bg-surface-3: #1d3048;
+  --border-subtle: #27405f;
+  --border-strong: #35567b;
+  --text-primary: #e5efff;
+  --text-secondary: #b8cceb;
+  --text-muted: #8ea8c9;
+  --text-subtle: #7690b0;
+  --accent: #5aa7ff;
+  --accent-hover: #7bb8ff;
+  --accent-soft: #183457;
+  --success: #4cb784;
+  --warning: #d8a24d;
+  --danger: #ea7979;
+  --panel-shadow: 0 20px 42px -28px rgba(2, 8, 20, 0.72);
+  --focus-ring: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 * {
@@ -143,6 +180,39 @@ body {
   color: var(--text-subtle);
 }
 
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
+  padding: 2px;
+}
+
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  color: var(--text-subtle);
+  background: transparent;
+  width: 28px;
+  height: 28px;
+}
+
+.theme-toggle-btn:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-surface-2) 88%, transparent);
+}
+
+.theme-toggle-btn[data-active='true'] {
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-surface));
+  color: var(--accent);
+}
+
 :where(button, a, input, textarea, select, [role='button']) {
   transition-property: color, background-color, border-color, box-shadow, transform;
   transition-duration: var(--motion-fast);
@@ -193,5 +263,30 @@ body {
 
   :where(button, a, input, textarea, select, [role='button']) {
     transition: none;
+  }
+}
+
+
+
+@layer base {
+  :root {
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+  .dark {
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }

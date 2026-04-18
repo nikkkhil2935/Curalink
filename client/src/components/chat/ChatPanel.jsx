@@ -4,6 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { api } from '../../utils/api';
 import ChatInput from './ChatInput';
 import MessageBubble from './MessageBubble';
+import PDFAbnormalAlert from '@/components/features/PDFAbnormalAlert.jsx';
 import LoadingOverlay from '../ui/LoadingOverlay';
 import ErrorBanner from '../ui/ErrorBanner';
 import { patchToast, pushToast } from '@/store/useToastStore.js';
@@ -15,9 +16,14 @@ export default function ChatPanel() {
     messages,
     addMessage,
     applyAssistantResponse,
+    setSessionConflicts,
+    setLivingBrief,
     updateMessage,
     highlightedMessageId,
     setHighlightedMessage,
+    showAbnormalAlert,
+    latestAbnormalFindings,
+    setShowAbnormalAlert,
     isLoading,
     setLoading,
     error,
@@ -60,6 +66,8 @@ export default function ChatPanel() {
 
   const handleSend = async (text) => {
     if (!text.trim() || isLoading) return;
+
+    setShowAbnormalAlert(false);
     
     const tempId = Date.now().toString();
     const userMsg = { role: 'user', text };
@@ -76,12 +84,38 @@ export default function ChatPanel() {
     
     try {
       const { data } = await api.post(`/sessions/${sessionId}/query`, { message: text.trim() });
-      applyAssistantResponse(data.message, data.sources);
+      applyAssistantResponse(data.message, data.sources, {
+        conflicts: data?.conflicts,
+        patientProfile: data?.patientProfile,
+        brief: data?.brief
+      });
+
+      void api
+        .get(`/sessions/${sessionId}/conflicts`)
+        .then(({ data: conflictData }) => {
+          setSessionConflicts({
+            totalConflicts: Number(conflictData?.totalConflicts || 0),
+            outcomeGroups: Array.isArray(conflictData?.outcomeGroups) ? conflictData.outcomeGroups : []
+          });
+        })
+        .catch(() => {});
+
+      void api
+        .get(`/sessions/${sessionId}/brief`)
+        .then(({ data: briefData }) => {
+          setLivingBrief(briefData?.brief || null);
+        })
+        .catch(() => {});
+
+      const conflictCount = Array.isArray(data?.conflicts) ? data.conflicts.length : 0;
       patchToast(loadingToastId, {
         loading: false,
         variant: 'success',
         title: 'Response Ready',
-        message: 'Evidence-backed answer generated successfully.'
+        message:
+          conflictCount > 0
+            ? `Evidence-backed answer generated with ${conflictCount} contradiction signal${conflictCount === 1 ? '' : 's'}.`
+            : 'Evidence-backed answer generated successfully.'
       });
     } catch (err) {
       const apiError = err?.response?.data?.error;
@@ -104,6 +138,13 @@ export default function ChatPanel() {
       
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-4">
         <div className="mx-auto w-full max-w-240 space-y-4">
+          {showAbnormalAlert && messages.length === 0 ? (
+            <PDFAbnormalAlert
+              findings={latestAbnormalFindings}
+              onDismiss={() => setShowAbnormalAlert(false)}
+            />
+          ) : null}
+
           {messages?.length === 0 ? (
             <div className="flex h-full min-h-75 flex-col items-center justify-center space-y-3 text-center">
               <h2 className="text-xl font-semibold token-text">Ask anything about {currentSession?.disease || 'this topic'}</h2>

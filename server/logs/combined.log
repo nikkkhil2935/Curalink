@@ -105,3 +105,107 @@
 {"level":"info","message":"PubMed fetched 200 articles in 8911ms","timestamp":"2026-04-17T22:04:47.205Z"}
 {"level":"info","message":"Server running on port 5000","timestamp":"2026-04-17T22:17:03.583Z"}
 {"level":"info","message":"MongoDB connected (primary)","timestamp":"2026-04-17T22:17:03.736Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T16:38:37.151Z"}
+{"level":"info","message":"Starting retrieval for query: \"causes cancer\"","timestamp":"2026-04-18T16:40:22.457Z"}
+{"level":"info","message":"PubMed searching: \"(cancer) AND (causes) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-18T16:40:22.458Z"}
+{"level":"info","message":"OpenAlex searching: \"causes cancer\"","timestamp":"2026-04-18T16:40:22.464Z"}
+{"level":"info","message":"ClinicalTrials searching: \"cancer\"","timestamp":"2026-04-18T16:40:22.469Z"}
+{"level":"info","message":"ClinicalTrials fetched 20 studies in 1415ms","timestamp":"2026-04-18T16:40:23.884Z"}
+{"level":"info","message":"OpenAlex fetched 300 works in 6684ms","timestamp":"2026-04-18T16:40:29.148Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 12653ms","timestamp":"2026-04-18T16:40:35.111Z"}
+{"level":"info","message":"Server running on port 5010","timestamp":"2026-04-18T16:47:08.141Z"}
+{"level":"info","message":"Starting retrieval for query: \"latest treatment options asthma\"","timestamp":"2026-04-18T16:47:08.846Z"}
+{"level":"info","message":"PubMed searching: \"(asthma) AND (latest OR treatment OR options) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-18T16:47:08.847Z"}
+{"level":"info","message":"OpenAlex searching: \"latest treatment options asthma\"","timestamp":"2026-04-18T16:47:08.852Z"}
+{"level":"info","message":"ClinicalTrials searching: \"asthma\"","timestamp":"2026-04-18T16:47:08.856Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1300ms","timestamp":"2026-04-18T16:47:10.156Z"}
+{"level":"info","message":"OpenAlex fetched 298 works in 8687ms","timestamp":"2026-04-18T16:47:17.539Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 20806ms","timestamp":"2026-04-18T16:47:29.653Z"}
+{"level":"info","message":"Server running on port 5010","timestamp":"2026-04-18T16:52:52.835Z"}
+{"level":"info","message":"Starting retrieval for query: \"latest treatment options asthma\"","timestamp":"2026-04-18T16:52:53.125Z"}
+{"level":"info","message":"PubMed searching: \"(asthma) AND (latest OR treatment OR options) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-18T16:52:53.125Z"}
+{"level":"info","message":"OpenAlex searching: \"latest treatment options asthma\"","timestamp":"2026-04-18T16:52:53.131Z"}
+{"level":"info","message":"ClinicalTrials searching: \"asthma\"","timestamp":"2026-04-18T16:52:53.133Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1276ms","timestamp":"2026-04-18T16:52:54.409Z"}
+{"level":"info","message":"OpenAlex fetched 298 works in 5917ms","timestamp":"2026-04-18T16:52:59.048Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 34591ms","timestamp":"2026-04-18T16:53:27.716Z"}
+{"level":"info","message":"Server running on port 5010","timestamp":"2026-04-18T17:11:58.024Z"}
+{"level":"info","message":"Starting retrieval for query: \"latest treatment options asthma\"","timestamp":"2026-04-18T17:11:58.648Z"}
+{"level":"info","message":"PubMed searching: \"(asthma) AND (latest OR treatment OR options) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-18T17:11:58.649Z"}
+{"level":"info","message":"OpenAlex searching: \"latest treatment options asthma\"","timestamp":"2026-04-18T17:11:58.655Z"}
+{"level":"info","message":"ClinicalTrials searching: \"asthma\"","timestamp":"2026-04-18T17:11:58.657Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1257ms","timestamp":"2026-04-18T17:11:59.914Z"}
+{"level":"info","message":"OpenAlex fetched 298 works in 6510ms","timestamp":"2026-04-18T17:12:05.165Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 8402ms","timestamp":"2026-04-18T17:12:07.051Z"}
+{"level":"info","message":"Starting retrieval for query: \"periods periods\"","timestamp":"2026-04-18T18:15:59.645Z"}
+{"level":"info","message":"PubMed searching: \"periods AND (adverse effects[MeSH])\"","timestamp":"2026-04-18T18:15:59.648Z"}
+{"level":"info","message":"OpenAlex searching: \"periods periods\"","timestamp":"2026-04-18T18:15:59.653Z"}
+{"level":"info","message":"ClinicalTrials searching: \"periods\"","timestamp":"2026-04-18T18:15:59.661Z"}
+{"level":"info","message":"PubMed fetched 0 articles in 757ms","timestamp":"2026-04-18T18:16:00.405Z"}
+{"level":"info","message":"ClinicalTrials fetched 66 studies in 1466ms","timestamp":"2026-04-18T18:16:01.127Z"}
+{"level":"info","message":"OpenAlex fetched 300 works in 5605ms","timestamp":"2026-04-18T18:16:05.258Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T18:16:54.360Z"}
+{"level":"info","message":"Server running on port 5010","timestamp":"2026-04-18T20:57:54.318Z"}
+{"level":"info","message":"Starting retrieval for query: \"latest treatment options asthma\"","timestamp":"2026-04-18T20:57:54.895Z"}
+{"level":"info","message":"PubMed searching: \"(asthma) AND (latest OR treatment OR options) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-18T20:57:54.895Z"}
+{"level":"info","message":"OpenAlex searching: \"latest treatment options asthma\"","timestamp":"2026-04-18T20:57:54.901Z"}
+{"level":"info","message":"ClinicalTrials searching: \"asthma\"","timestamp":"2026-04-18T20:57:54.903Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1272ms","timestamp":"2026-04-18T20:57:56.175Z"}
+{"level":"info","message":"OpenAlex fetched 298 works in 7137ms","timestamp":"2026-04-18T20:58:02.038Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 9085ms","timestamp":"2026-04-18T20:58:03.980Z"}
+{"level":"info","message":"Server running on port 5011","timestamp":"2026-04-18T21:00:08.739Z"}
+{"level":"info","message":"Server running on port 5011","timestamp":"2026-04-18T21:00:51.138Z"}
+{"level":"info","message":"Server running on port 5011","timestamp":"2026-04-18T21:01:31.902Z"}
+{"level":"error","message":"Error:","timestamp":"2026-04-18T21:01:35.931Z"}
+{"level":"info","message":"Server running on port 5011","timestamp":"2026-04-18T21:02:17.595Z"}
+{"level":"info","message":"Starting retrieval for query: \"lab report shows wbc high hemoglobin anemia\"","timestamp":"2026-04-18T21:02:23.393Z"}
+{"level":"info","message":"PubMed searching: \"(anemia) AND (lab OR report OR shows OR wbc OR high OR hemoglobin) AND (diagnosis[MeSH] OR diagnostic[Title/Abstract])\"","timestamp":"2026-04-18T21:02:23.393Z"}
+{"level":"info","message":"OpenAlex searching: \"lab report shows wbc high hemoglobin anemia\"","timestamp":"2026-04-18T21:02:23.404Z"}
+{"level":"info","message":"ClinicalTrials searching: \"anemia\"","timestamp":"2026-04-18T21:02:23.415Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1284ms","timestamp":"2026-04-18T21:02:24.698Z"}
+{"level":"info","message":"OpenAlex fetched 300 works in 8688ms","timestamp":"2026-04-18T21:02:32.092Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 8961ms","timestamp":"2026-04-18T21:02:32.354Z"}
+{"level":"info","message":"Server running on port 5010","timestamp":"2026-04-18T21:04:15.411Z"}
+{"level":"info","message":"Starting retrieval for query: \"latest treatment options asthma\"","timestamp":"2026-04-18T21:04:16.455Z"}
+{"level":"info","message":"PubMed searching: \"(asthma) AND (latest OR treatment OR options) AND (therapy[MeSH] OR treatment[Title/Abstract])\"","timestamp":"2026-04-18T21:04:16.455Z"}
+{"level":"info","message":"OpenAlex searching: \"latest treatment options asthma\"","timestamp":"2026-04-18T21:04:16.466Z"}
+{"level":"info","message":"ClinicalTrials searching: \"asthma\"","timestamp":"2026-04-18T21:04:16.468Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1408ms","timestamp":"2026-04-18T21:04:17.877Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 16883ms","timestamp":"2026-04-18T21:04:33.338Z"}
+{"level":"info","message":"OpenAlex fetched 298 works in 18518ms","timestamp":"2026-04-18T21:04:34.984Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T21:08:00.001Z"}
+{"level":"error","message":"Port 5000 is already in use. Stop the existing process or set PORT.","timestamp":"2026-04-18T21:10:53.408Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T21:11:39.522Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T21:11:51.027Z"}
+{"level":"info","message":"Starting retrieval for query: \"kidney stone kidney stone\"","timestamp":"2026-04-18T21:20:11.106Z"}
+{"level":"info","message":"PubMed searching: \"kidney stone AND (adverse effects[MeSH])\"","timestamp":"2026-04-18T21:20:11.107Z"}
+{"level":"info","message":"OpenAlex searching: \"kidney stone kidney stone\"","timestamp":"2026-04-18T21:20:11.111Z"}
+{"level":"info","message":"ClinicalTrials searching: \"kidney stone\"","timestamp":"2026-04-18T21:20:11.115Z"}
+{"level":"info","message":"PubMed fetched 0 articles in 853ms","timestamp":"2026-04-18T21:20:11.960Z"}
+{"level":"info","message":"ClinicalTrials fetched 100 studies in 1632ms","timestamp":"2026-04-18T21:20:12.748Z"}
+{"level":"info","message":"OpenAlex fetched 300 works in 8079ms","timestamp":"2026-04-18T21:20:19.190Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T21:30:59.987Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T21:33:44.316Z"}
+{"level":"info","message":"Starting retrieval for query: \"what are issues in my report what  possible health isssue i can get in future ? ananlyze for me asthma\"","timestamp":"2026-04-18T21:39:56.040Z"}
+{"level":"info","message":"PubMed searching: \"(what are issues in my report what  possible health isssue i can get in future ? ananlyze for me) AND (asthma)\"","timestamp":"2026-04-18T21:39:56.041Z"}
+{"level":"info","message":"OpenAlex searching: \"what are issues in my report what  possible health isssue i can get in future ? ananlyze for me asthma\"","timestamp":"2026-04-18T21:39:56.045Z"}
+{"level":"info","message":"ClinicalTrials searching: \"asthma\"","timestamp":"2026-04-18T21:39:56.046Z"}
+{"level":"error","message":"ClinicalTrials fetch error: Request failed with status code 400","timestamp":"2026-04-18T21:39:56.402Z"}
+{"level":"error","message":"ClinicalTrials fetch error: Request failed with status code 400","timestamp":"2026-04-18T21:39:56.710Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 664ms","timestamp":"2026-04-18T21:39:56.710Z"}
+{"level":"info","message":"PubMed fetched 0 articles in 846ms","timestamp":"2026-04-18T21:39:56.887Z"}
+{"level":"info","message":"OpenAlex fetched 0 works in 2918ms","timestamp":"2026-04-18T21:39:58.963Z"}
+{"level":"info","message":"Starting retrieval for query: \"What are the best ways to reduce my screen time and prevent digital eye strain? asthma\"","timestamp":"2026-04-18T21:40:16.524Z"}
+{"level":"info","message":"PubMed searching: \"(What are the best ways to reduce my screen time and prevent digital eye strain?) AND (asthma)\"","timestamp":"2026-04-18T21:40:16.525Z"}
+{"level":"info","message":"OpenAlex searching: \"What are the best ways to reduce my screen time and prevent digital eye strain? asthma\"","timestamp":"2026-04-18T21:40:16.527Z"}
+{"level":"info","message":"ClinicalTrials searching: \"asthma\"","timestamp":"2026-04-18T21:40:16.528Z"}
+{"level":"info","message":"PubMed fetched 0 articles in 869ms","timestamp":"2026-04-18T21:40:17.394Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1247ms","timestamp":"2026-04-18T21:40:17.775Z"}
+{"level":"info","message":"OpenAlex fetched 162 works in 4882ms","timestamp":"2026-04-18T21:40:21.409Z"}
+{"level":"info","message":"Starting retrieval for query: \"symptoms anemia\"","timestamp":"2026-04-18T21:42:31.956Z"}
+{"level":"info","message":"PubMed searching: \"(anemia) AND (symptoms) AND (diagnosis[MeSH] OR diagnostic[Title/Abstract])\"","timestamp":"2026-04-18T21:42:31.957Z"}
+{"level":"info","message":"OpenAlex searching: \"symptoms anemia\"","timestamp":"2026-04-18T21:42:31.959Z"}
+{"level":"info","message":"ClinicalTrials searching: \"anemia\"","timestamp":"2026-04-18T21:42:31.961Z"}
+{"level":"info","message":"ClinicalTrials fetched 0 studies in 1610ms","timestamp":"2026-04-18T21:42:33.571Z"}
+{"level":"info","message":"PubMed fetched 200 articles in 7037ms","timestamp":"2026-04-18T21:42:38.994Z"}
+{"level":"info","message":"OpenAlex fetched 300 works in 7272ms","timestamp":"2026-04-18T21:42:39.231Z"}

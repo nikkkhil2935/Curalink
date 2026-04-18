@@ -12,6 +12,39 @@ const DEFAULT_LLM_PROVIDER = 'groq';
 const DEFAULT_GROQ_MODEL = 'llama-3.1-8b-instant';
 const DEFAULT_OLLAMA_MODEL = 'llama3.1:8b';
 
+function loadLocalEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  const content = fs.readFileSync(filePath, 'utf8');
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+
+    const separator = line.indexOf('=');
+    if (separator <= 0) {
+      continue;
+    }
+
+    const key = line.slice(0, separator).trim();
+    let value = line.slice(separator + 1).trim();
+
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+}
+
 function parsePort(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 65535) {
@@ -61,6 +94,10 @@ async function findAvailablePort(startPort, maxAttempts = 25) {
 }
 
 async function run() {
+  loadLocalEnvFile(path.join(rootDir, '.env'));
+  loadLocalEnvFile(path.join(rootDir, 'server', '.env'));
+  loadLocalEnvFile(path.join(rootDir, 'llm-service', '.env'));
+
   const requestedLlmPort = parsePort(process.env.LLM_PORT, DEFAULT_LLM_PORT);
   const llmPort = await findAvailablePort(requestedLlmPort);
   const clientPort = parsePort(process.env.CLIENT_PORT, DEFAULT_CLIENT_PORT);

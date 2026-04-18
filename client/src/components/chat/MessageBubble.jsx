@@ -1,7 +1,16 @@
-import React, { useMemo } from 'react';
-import { Download } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Download, FileText } from 'lucide-react';
 import StructuredAnswer from './StructuredAnswer';
 import BookmarkToggle from '@/components/features/BookmarkToggle.jsx';
+import ConflictAlert from '@/components/features/ConflictAlert.jsx';
+import ConflictExplorerSheet from '@/components/features/ConflictExplorerSheet.jsx';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle
+} from '@/components/ui/sheet.jsx';
 import { useAppStore } from '@/store/useAppStore.js';
 import { api } from '@/utils/api.js';
 import { patchToast, pushToast } from '@/store/useToastStore.js';
@@ -65,6 +74,8 @@ export default function MessageBubble({ sessionId, message, isHighlighted = fals
   const sourcesByMessageId = useAppStore((state) => state.sourcesByMessageId);
   const isUser = message.role === 'user';
   const messageId = String(message?._id || message?.id || '');
+  const [isConflictExplorerOpen, setIsConflictExplorerOpen] = useState(false);
+  const [isPdfSourceSheetOpen, setIsPdfSourceSheetOpen] = useState(false);
 
   const cachedSources = useMemo(() => {
     if (!messageId) {
@@ -180,6 +191,18 @@ export default function MessageBubble({ sessionId, message, isHighlighted = fals
         </div>
       </div>
       <div className="w-full text-sm token-text">
+        {Array.isArray(message?.conflicts) && message.conflicts.length > 0 ? (
+          <div className="mb-3">
+            <ConflictAlert
+              conflicts={message.conflicts}
+              compact
+              onOpenExplorer={() => {
+                setIsConflictExplorerOpen(true);
+              }}
+            />
+          </div>
+        ) : null}
+
         {message.structuredAnswer ? (
           <StructuredAnswer answer={message.structuredAnswer} stats={message.retrievalStats} />
         ) : (
@@ -200,6 +223,58 @@ export default function MessageBubble({ sessionId, message, isHighlighted = fals
           ))}
         </div>
       )}
+
+      {message?.pdfContextUsed ? (
+        <div className="mt-3 flex items-center gap-2 text-xs token-text-subtle">
+          <FileText className="h-3.5 w-3.5 text-(--accent)" />
+          <span>Answer includes context from your uploaded documents.</span>
+          <button
+            type="button"
+            onClick={() => setIsPdfSourceSheetOpen(true)}
+            className="text-(--accent) underline-offset-2 hover:underline"
+          >
+            View sources
+          </button>
+        </div>
+      ) : null}
+
+      <ConflictExplorerSheet
+        sessionId={sessionId}
+        open={isConflictExplorerOpen}
+        onOpenChange={setIsConflictExplorerOpen}
+      />
+
+      <Sheet open={isPdfSourceSheetOpen} onOpenChange={setIsPdfSourceSheetOpen}>
+        <SheetContent side="right" className="w-full max-w-lg token-surface p-4">
+          <SheetHeader className="mb-3">
+            <SheetTitle className="token-text">PDF context used in this answer</SheetTitle>
+            <SheetDescription className="token-text-subtle">
+              Retrieved document chunks that informed this response.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="space-y-2 overflow-y-auto pr-1">
+            {(Array.isArray(message?.pdfChunksUsed) ? message.pdfChunksUsed : []).length === 0 ? (
+              <p className="rounded-lg border token-border token-surface-2 px-3 py-2 text-xs token-text-subtle">
+                No chunk details were returned for this response.
+              </p>
+            ) : (
+              (Array.isArray(message?.pdfChunksUsed) ? message.pdfChunksUsed : []).map((chunk, index) => {
+                const metadata = chunk?.metadata || {};
+                return (
+                  <div key={`${messageId}-chunk-${index}`} className="rounded-lg border token-border token-surface-2 p-3">
+                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide token-text-subtle">
+                      {metadata?.filename || metadata?.doc_id || 'Uploaded PDF'}
+                      {metadata?.doc_type ? ` - ${metadata.doc_type}` : ''}
+                    </p>
+                    <p className="text-xs leading-relaxed token-text">{String(chunk?.text || '').slice(0, 1200)}</p>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

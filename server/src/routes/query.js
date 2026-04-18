@@ -3,11 +3,19 @@ import mongoose from 'mongoose';
 import Session from '../models/Session.js';
 import Message from '../models/Message.js';
 import { runRetrievalPipeline } from '../services/pipeline/orchestrator.js';
-import { generateSmartSuggestions } from '../services/llm.js';
+import { buildRAGContext, buildSystemPrompt } from '../services/pipeline/contextPackager.js';
+import {
+  callFusedLLM,
+  generateSmartSuggestions,
+  parseLLMResponse,
+  retrievePdfContext
+} from '../services/llm.js';
 import { invalidateInsightsCache } from '../middleware/insightsCache.js';
 import { gzipCompression } from '../middleware/gzipCompression.js';
 import { applyHealthResponseContractPatch } from '../services/healthContract.js';
 import { invalidateSessionInsightsCache } from '../services/insightsCache.js';
+import { generateSessionBrief } from '../services/briefGenerator.js';
+import logger from '../lib/logger.js';
 import {
   getCachedQueryResult,
   setCachedQueryResult
@@ -33,6 +41,95 @@ function normalizeHistoryItems(items) {
     .map((value) => String(value || '').trim())
     .filter(Boolean)
     .slice(-12);
+}
+
+function formatConversationHistory(messages = []) {
+  return (Array.isArray(messages) ? messages : [])
+    .map((message) => ({
+      role: message?.role === 'assistant' ? 'assistant' : 'user',
+      content: String(message?.text || '').trim()
+    }))
+    .filter((entry) => entry.content)
+    .slice(-4);
+}
+
+function buildAssistantTextFromStructuredAnswer(answer = {}) {
+  const overview = String(answer?.condition_overview || '').trim();
+  const recommendations = String(answer?.recommendations || '').trim();
+  const topInsights = (Array.isArray(answer?.research_insights) ? answer.research_insights : [])
+    .map((insight) => String(insight?.insight || '').trim())
+    .filter(Boolean)
+    .slice(0, 2);
+
+  const blocks = [overview, ...topInsights, recommendations].filter(Boolean);
+  if (!blocks.length) {
+    return 'Please consult your healthcare provider for personalized guidance.';
+  }
+
+  return blocks.join('\n\n');
+}
+
+async function buildFusedQueryPayload({
+  session,
+  message,
+  contextDocs,
+  sourceIndex,
+  evidenceStrength,
+  patientProfile,
+  conversationHistory
+}) {
+  const uploadedDocs = Array.isArray(session?.uploadedDocs) ? session.uploadedDocs : [];
+  if (!uploadedDocs.length) {
+    return {
+      responseText: '',
+      structuredAnswer: null,
+      pdfContextUsed: false,
+      pdfChunksUsed: []
+    };
+  }
+
+  const pdfRetrieveResult = await retrievePdfContext({
+    query: message,
+    sessionId: String(session._id),
+    topK: 6,
+    focusAbnormal: false
+  });
+
+  if (!pdfRetrieveResult?.has_pdf_context) {
+    return {
+      responseText: '',
+      structuredAnswer: null,
+      pdfContextUsed: false,
+      pdfChunksUsed: []
+    };
+  }
+
+  const ragContext = buildRAGContext(contextDocs || [], session.disease, message, session);
+  const llmData = await callFusedLLM({
+    system_prompt: buildSystemPrompt(patientProfile?.promptContext || ''),
+    user_prompt: message,
+    session_id: String(session._id),
+    pdf_context: pdfRetrieveResult.context_text,
+    research_context: ragContext?.sourcesText || '',
+    conversation_history: formatConversationHistory(conversationHistory),
+    temperature: 0.3,
+    max_tokens: 2048,
+    model: 'llama-3.3-70b-versatile'
+  });
+
+  const structuredAnswer = parseLLMResponse(llmData, {
+    allowedCitationIds: [...Object.keys(sourceIndex || {}), 'DOC'],
+    contextDocs: contextDocs || [],
+    disease: session?.disease,
+    evidenceStrengthLabel: evidenceStrength?.label
+  });
+
+  return {
+    responseText: buildAssistantTextFromStructuredAnswer(structuredAnswer),
+    structuredAnswer,
+    pdfContextUsed: true,
+    pdfChunksUsed: Array.isArray(pdfRetrieveResult?.chunks) ? pdfRetrieveResult.chunks : []
+  };
 }
 
 router.get('/suggestions', async (req, res, next) => {
@@ -117,8 +214,10 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       .sort({ createdAt: -1 })
       .limit(12)
       .lean();
+    const chronologicalConversationHistory = [...conversationHistory].reverse();
+    const hasUploadedDocs = Array.isArray(session.uploadedDocs) && session.uploadedDocs.length > 0;
 
-    let pipelineResult = getCachedQueryResult(session._id, cleanedMessage);
+    let pipelineResult = hasUploadedDocs ? null : getCachedQueryResult(session._id, cleanedMessage);
     if (pipelineResult) {
       pipelineResult.stats = {
         ...(pipelineResult.stats || {}),
@@ -140,7 +239,7 @@ router.post('/sessions/:id/query', async (req, res, next) => {
         ]
       };
     } else {
-      const freshPipelineResult = await runRetrievalPipeline(session, cleanedMessage, conversationHistory.reverse());
+      const freshPipelineResult = await runRetrievalPipeline(session, cleanedMessage, chronologicalConversationHistory);
       pipelineResult = {
         ...freshPipelineResult,
         stats: {
@@ -149,7 +248,9 @@ router.post('/sessions/:id/query', async (req, res, next) => {
         }
       };
 
-      setCachedQueryResult(session._id, cleanedMessage, pipelineResult);
+      if (!hasUploadedDocs) {
+        setCachedQueryResult(session._id, cleanedMessage, pipelineResult);
+      }
     }
 
     const {
@@ -157,14 +258,44 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       structuredAnswer,
       contextDocs,
       evidenceDocs,
+      conflicts,
       stats,
       evidenceStrength,
       intentType,
       expandedQuery,
       contextBadge,
+      patientProfile,
       sourceIndex,
       trace
     } = pipelineResult;
+
+    let finalResponseText = responseText;
+    let finalStructuredAnswer = structuredAnswer;
+    let pdfContextUsed = false;
+    let pdfChunksUsed = [];
+
+    if (hasUploadedDocs) {
+      try {
+        const fusedResult = await buildFusedQueryPayload({
+          session,
+          message: cleanedMessage,
+          contextDocs,
+          sourceIndex,
+          evidenceStrength,
+          patientProfile,
+          conversationHistory: chronologicalConversationHistory
+        });
+
+        if (fusedResult?.pdfContextUsed && fusedResult?.structuredAnswer) {
+          finalResponseText = fusedResult.responseText || finalResponseText;
+          finalStructuredAnswer = fusedResult.structuredAnswer;
+          pdfContextUsed = true;
+          pdfChunksUsed = Array.isArray(fusedResult.pdfChunksUsed) ? fusedResult.pdfChunksUsed : [];
+        }
+      } catch (fusedError) {
+        logger.warn(`Fused PDF generation fallback to standard path: ${fusedError?.message || fusedError}`);
+      }
+    }
 
     const createMessagesAndUpdateSession = async (dbSession = null) => {
       const writeOptions = dbSession ? { session: dbSession, ordered: true } : { ordered: true };
@@ -179,13 +310,16 @@ router.post('/sessions/:id/query', async (req, res, next) => {
           {
             sessionId: session._id,
             role: 'assistant',
-            text: responseText,
+            text: finalResponseText,
             usedSourceIds: contextDocs.map((doc) => doc.id),
             sourceIndex,
+            pdfContextUsed,
+            pdfChunksUsed,
             retrievalStats: stats,
             intentType,
             contextBadge,
-            structuredAnswer,
+            conflicts: Array.isArray(conflicts) ? conflicts : [],
+            structuredAnswer: finalStructuredAnswer,
             trace
           }
         ],
@@ -273,9 +407,18 @@ router.post('/sessions/:id/query', async (req, res, next) => {
 
     invalidateSessionInsightsCache(session._id);
 
+    // Trigger brief refresh without blocking the query response path.
+    generateSessionBrief(req.params.id).catch((error) => {
+      logger.error(`Brief regen failed for session ${req.params.id}: ${error.message}`);
+    });
+
     return res.json({
       message: assistantMessage,
       sources: sourcesWithCitations,
+      conflicts: Array.isArray(conflicts) ? conflicts : [],
+      patientProfile,
+      pdfContextUsed: Boolean(assistantMessage?.pdfContextUsed),
+      pdfChunksUsed: Array.isArray(assistantMessage?.pdfChunksUsed) ? assistantMessage.pdfChunksUsed : [],
       stats,
       evidenceStrength,
       sourceIndex,

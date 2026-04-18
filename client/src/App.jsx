@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import LoadingOverlay from '@/components/ui/LoadingOverlay.jsx';
+import ErrorBoundary from '@/components/ui/ErrorBoundary.jsx';
 import ToastViewport from '@/components/ui/ToastViewport.jsx';
 import SystemStatusBanner from '@/components/features/SystemStatusBanner.jsx';
 
@@ -20,17 +21,20 @@ function RouteFallback() {
 
 export default function App() {
   return (
-    <>
+    <ErrorBoundary>
       <SystemStatusBanner />
       <ToastViewport />
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/app" element={<LandingPage />} />
+          <Route path="/research" element={<LandingPage />} />
           <Route path="/research/:sessionId" element={<ResearchInterface />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/analytics/:sessionId" element={<Analytics />} />
+          <Route path="*" element={<LandingPage />} />
         </Routes>
       </Suspense>
-    </>
+    </ErrorBoundary>
   );
 }

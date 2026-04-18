@@ -1,9 +1,21 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ArrowUpIcon, Sparkles } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea.jsx';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle
+} from '@/components/ui/sheet.jsx';
+import PDFContextIndicator from '@/components/chat/PDFContextIndicator.jsx';
+import PDFUploadPanel from '@/components/features/PDFUploadPanel.jsx';
+import { useAppStore } from '@/store/useAppStore.js';
 import { api } from '@/utils/api.js';
+
+const MAX_INPUT_LENGTH = 1000;
 
 function useAutoResizeTextarea({ minHeight, maxHeight }) {
     const textareaRef = useRef(null);
@@ -45,19 +57,29 @@ function useAutoResizeTextarea({ minHeight, maxHeight }) {
 
 export default function ChatInput({ onSend, disabled }) {
     const { sessionId } = useParams();
+    const sessionUploadedDocs = useAppStore((state) => state.sessionUploadedDocs);
     const [value, setValue] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [suggestions, setSuggestions] = useState([]);
     const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+    const [isPdfPanelOpen, setIsPdfPanelOpen] = useState(false);
 
     const { textareaRef, adjustHeight } = useAutoResizeTextarea({
         minHeight: 60,
         maxHeight: 200
     });
 
+    const sendShortcutLabel = useMemo(() => {
+        if (typeof navigator === 'undefined') {
+            return 'Ctrl+Enter';
+        }
+
+        return /mac/i.test(navigator.platform) ? 'Cmd+Enter' : 'Ctrl+Enter';
+    }, []);
+
     useEffect(() => {
         const handler = (e) => {
-            setValue(e.detail);
+            setValue(String(e.detail || '').slice(0, MAX_INPUT_LENGTH));
             adjustHeight();
         };
         window.addEventListener('set-chat-input', handler);
@@ -122,7 +144,7 @@ export default function ChatInput({ onSend, disabled }) {
     };
 
     const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             handleSubmit();
         }
@@ -130,13 +152,18 @@ export default function ChatInput({ onSend, disabled }) {
 
     return (
         <div className="mx-auto w-full max-w-240">
+            <PDFContextIndicator
+                docs={sessionUploadedDocs}
+                onOpenPanel={() => setIsPdfPanelOpen(true)}
+            />
+
             <div className="relative rounded-2xl border token-border token-surface focus-within:border-(--accent)">
                 <div className="overflow-y-auto">
                     <Textarea
                         ref={textareaRef}
                         value={value}
                         onChange={(e) => {
-                            setValue(e.target.value);
+                            setValue(e.target.value.slice(0, MAX_INPUT_LENGTH));
                             adjustHeight();
                         }}
                         onFocus={() => setShowSuggestions(suggestions.length > 0)}
@@ -146,6 +173,7 @@ export default function ChatInput({ onSend, disabled }) {
                         onKeyDown={handleKeyDown}
                         placeholder="Ask Curalink a follow-up question..."
                         disabled={disabled}
+                        maxLength={MAX_INPUT_LENGTH}
                         className={cn(
                             'w-full px-5 py-4',
                             'resize-none',
@@ -178,7 +206,7 @@ export default function ChatInput({ onSend, disabled }) {
                                     type="button"
                                     onMouseDown={(event) => {
                                         event.preventDefault();
-                                        setValue(item);
+                                        setValue(String(item || '').slice(0, MAX_INPUT_LENGTH));
                                         adjustHeight();
                                         setShowSuggestions(false);
                                     }}
@@ -194,27 +222,50 @@ export default function ChatInput({ onSend, disabled }) {
                     </div>
                 ) : null}
 
-                <div className="flex items-center justify-between p-3">
-                    <p className="text-xs token-text-subtle">
-                        {disabled ? 'Generating response...' : 'Press Enter to send, Shift+Enter for newline'}
+                <div className="flex items-center justify-between gap-3 p-3">
+                    <p className="min-w-0 flex-1 text-xs token-text-subtle">
+                        {disabled ? 'Generating response...' : `Press ${sendShortcutLabel} to send, Enter for newline`}
                     </p>
-                    <button
-                        type="button"
-                        onClick={handleSubmit}
-                        disabled={disabled || !value.trim()}
-                        aria-label="Send question"
-                        className={cn(
-                            'flex items-center justify-center rounded-full p-2',
-                            value.trim() && !disabled
-                                ? 'bg-(--accent) text-white shadow-[0_0_15px_color-mix(in_srgb,var(--accent)_35%,transparent)] hover:bg-(--accent-hover)'
-                                : 'cursor-not-allowed border token-border bg-(--bg-surface-2) text-(--text-subtle)'
-                        )}
-                    >
-                        <ArrowUpIcon className="h-5 w-5" strokeWidth={2.5} />
-                        <span className="sr-only">Send</span>
-                    </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                        <span
+                            className={cn(
+                                'text-xs tabular-nums',
+                                value.length > MAX_INPUT_LENGTH * 0.9 ? 'text-(--warning)' : 'token-text-subtle'
+                            )}
+                            aria-live="polite"
+                        >
+                            {value.length}/{MAX_INPUT_LENGTH}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={handleSubmit}
+                            disabled={disabled || !value.trim()}
+                            aria-label="Send question"
+                            className={cn(
+                                'flex items-center justify-center rounded-full p-2',
+                                value.trim() && !disabled
+                                    ? 'bg-(--accent) text-white shadow-[0_0_15px_color-mix(in_srgb,var(--accent)_35%,transparent)] hover:bg-(--accent-hover)'
+                                    : 'cursor-not-allowed border token-border bg-(--bg-surface-2) text-(--text-subtle)'
+                            )}
+                        >
+                            <ArrowUpIcon className="h-5 w-5" strokeWidth={2.5} />
+                            <span className="sr-only">Send</span>
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            <Sheet open={isPdfPanelOpen} onOpenChange={setIsPdfPanelOpen}>
+                <SheetContent side="right" className="w-full max-w-md token-surface p-4">
+                    <SheetHeader className="mb-3">
+                        <SheetTitle className="token-text">Uploaded Documents</SheetTitle>
+                        <SheetDescription className="token-text-subtle">
+                            Manage PDFs used for this session's contextual answers.
+                        </SheetDescription>
+                    </SheetHeader>
+                    <PDFUploadPanel sessionId={sessionId} />
+                </SheetContent>
+            </Sheet>
         </div>
     );
 }

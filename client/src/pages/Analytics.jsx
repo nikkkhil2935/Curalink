@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Clock3, Search, TimerReset, Workflow } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Clock3, Search, TimerReset, Workflow, AlertTriangle } from 'lucide-react';
 import AppTopNav from '@/components/layout/AppTopNav.jsx';
 import AnalyticsMetricCard from '@/components/analytics/AnalyticsMetricCard.jsx';
 import AnalyticsChartsTabs from '@/components/analytics/AnalyticsChartsTabs.jsx';
@@ -36,10 +36,13 @@ function normalizeOverview(rawOverview) {
   return {
     total_sessions: Number(source.total_sessions ?? source.totalSessions ?? 0),
     total_queries: Number(source.total_queries ?? source.totalQueries ?? 0),
+    total_conflicts: Number(source.total_conflicts ?? source.totalConflicts ?? 0),
+    conflict_rate: Number(source.conflict_rate ?? source.conflictRate ?? 0),
     avg_latency_ms: Number(avgLatencyMs || 0),
     p95_latency_ms: Number(source.p95_latency_ms ?? 0),
     top_intents: topIntents,
     daily_activity: Array.isArray(source.daily_activity) ? source.daily_activity : [],
+    daily_conflicts: Array.isArray(source.daily_conflicts) ? source.daily_conflicts : [],
     source_distribution: sourceDistribution
   };
 }
@@ -60,7 +63,20 @@ function formatLatency(value) {
   return `${Math.round(numeric)} ms`;
 }
 
+function formatPercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return '0%';
+  }
+
+  return `${numeric.toFixed(1)}%`;
+}
+
 export default function Analytics() {
+  const navigate = useNavigate();
+  const { sessionId: routeSessionIdParam } = useParams();
+  const routeSessionId = String(routeSessionIdParam || '').trim();
+
   const [overview, setOverview] = useState(() => normalizeOverview({}));
   const [sessions, setSessions] = useState([]);
   const [selectedSessionId, setSelectedSessionId] = useState('');
@@ -93,6 +109,10 @@ export default function Analytics() {
         setSessionBreakdown(null);
       } else {
         setSelectedSessionId((previous) => {
+          if (routeSessionId && fetchedSessions.some((session) => session._id === routeSessionId)) {
+            return routeSessionId;
+          }
+
           if (previous && fetchedSessions.some((session) => session._id === previous)) {
             return previous;
           }
@@ -108,7 +128,7 @@ export default function Analytics() {
     } finally {
       setIsLoadingOverview(false);
     }
-  }, []);
+  }, [routeSessionId]);
 
   const loadSessionBreakdown = useCallback(async (sessionId) => {
     if (!sessionId) {
@@ -139,6 +159,31 @@ export default function Analytics() {
     void loadSessionBreakdown(selectedSessionId);
   }, [loadSessionBreakdown, selectedSessionId]);
 
+  useEffect(() => {
+    if (!selectedSessionId) {
+      if (routeSessionId) {
+        navigate('/analytics', { replace: true });
+      }
+      return;
+    }
+
+    if (routeSessionId !== selectedSessionId) {
+      navigate(`/analytics/${selectedSessionId}`, { replace: true });
+    }
+  }, [navigate, routeSessionId, selectedSessionId]);
+
+  const handleSessionChange = useCallback((nextSessionId) => {
+    const normalizedSessionId = String(nextSessionId || '').trim();
+    setSelectedSessionId(normalizedSessionId);
+
+    if (normalizedSessionId) {
+      navigate(`/analytics/${normalizedSessionId}`, { replace: true });
+      return;
+    }
+
+    navigate('/analytics', { replace: true });
+  }, [navigate]);
+
   const topIntentSummary = useMemo(() => {
     const topIntent = Array.isArray(overview.top_intents) ? overview.top_intents[0] : null;
     if (!topIntent) {
@@ -156,7 +201,7 @@ export default function Analytics() {
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <Link
-              to="/app"
+              to={selectedSessionId ? `/research/${selectedSessionId}` : '/app'}
               className="mb-3 inline-flex items-center gap-2 text-sm font-medium token-text-subtle transition-colors hover:text-(--text-primary)"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -193,7 +238,7 @@ export default function Analytics() {
           <AnalyticsLoadingSkeleton />
         ) : (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
               <AnalyticsMetricCard
                 title="Total Sessions"
                 value={formatNumber(overview.total_sessions)}
@@ -222,6 +267,13 @@ export default function Analytics() {
                 icon={Clock3}
                 accent="slate"
               />
+              <AnalyticsMetricCard
+                title="Conflict Rate"
+                value={formatPercent(overview.conflict_rate)}
+                subtitle={`${formatNumber(overview.total_conflicts)} contradiction signals`}
+                icon={AlertTriangle}
+                accent="amber"
+              />
               <SystemStatusWidget avgLatencyMs={overview.avg_latency_ms} />
             </div>
 
@@ -241,7 +293,7 @@ export default function Analytics() {
             <SessionBreakdownPanel
               sessions={sessions}
               selectedSessionId={selectedSessionId}
-              onSessionChange={setSelectedSessionId}
+              onSessionChange={handleSessionChange}
               breakdown={sessionBreakdown}
               loading={isLoadingBreakdown}
               error={breakdownError}

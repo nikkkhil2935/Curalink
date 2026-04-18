@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, CircleAlert, CircleX, X } from 'lucide-react';
 import { getSystemHealth } from '@/utils/api.js';
 
-const STATUS_POLL_INTERVAL_MS = 60000;
+const STATUS_POLL_INTERVAL_MS = 30000;
 
 function normalizeServiceStatus(value) {
   const normalized = String(value || '').trim().toLowerCase();
@@ -42,7 +42,7 @@ export default function SystemStatusBanner() {
 
   const refreshStatus = useCallback(async () => {
     try {
-      const data = await getSystemHealth({ timeout: 8000 });
+      const data = await getSystemHealth({ forceRefresh: true, timeout: 8000 });
 
       const dbState = normalizeServiceStatus(data?.db || data?.services?.db);
       const llmState = normalizeServiceStatus(data?.llm || data?.services?.llm);

@@ -31,3 +31,5 @@ Thumbs.db
 
 
 graphify-out/
+llm-service/chroma_store/
+/chroma_store/

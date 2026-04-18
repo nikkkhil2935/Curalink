@@ -7,11 +7,11 @@ const INTENTS = ['Treatment Protocol', 'Side Effects', 'Drug Interactions', 'Cli
 const SEX_OPTIONS = ['Male', 'Female', 'Other'];
 const AGE_OPTIONS = [
   { label: 'Select…', value: '' },
-  { label: '0–18',    value: '18' },
-  { label: '19–30',   value: '30' },
-  { label: '31–50',   value: '45' },
-  { label: '51–70',   value: '60' },
-  { label: '71+',     value: '80' },
+  { label: '0–18', value: '0-18' },
+  { label: '19–30', value: '19-30' },
+  { label: '31–50', value: '31-50' },
+  { label: '51–70', value: '51-70' },
+  { label: '71+', value: '71+' },
 ];
 
 function Label({ children, htmlFor }) {
@@ -39,8 +39,9 @@ export default function ContextForm({ initialData = {}, onSubmit, onClose }) {
     focus: '',
     city: '',
     country: '',
-    age: '',
+    ageRange: '',
     sex: '',
+    conditions: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -77,7 +78,14 @@ export default function ContextForm({ initialData = {}, onSubmit, onClose }) {
         disease: form.disease.trim(),
         intent: form.intent.trim(),
         location: { city: form.city.trim(), country: form.country.trim() },
-        demographics: { age: form.age ? Number(form.age) : null, sex: form.sex || null },
+        demographics: {
+          ageRange: form.ageRange.trim(),
+          sex: form.sex || null,
+          conditions: form.conditions
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean)
+        },
       });
     } catch (error) {
       setSubmitError(extractApiError(error, 'Failed to create session. Please try again.'));
@@ -277,8 +285,8 @@ export default function ContextForm({ initialData = {}, onSubmit, onClose }) {
                     <div>
                       <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Age Range</label>
                       <select
-                        value={form.age}
-                        onChange={(e) => update('age', e.target.value)}
+                        value={form.ageRange}
+                        onChange={(e) => update('ageRange', e.target.value)}
                         disabled={isSubmitting}
                         className="cl-input w-full text-sm"
                         style={inputStyle}
@@ -301,6 +309,20 @@ export default function ContextForm({ initialData = {}, onSubmit, onClose }) {
                         {SEX_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
                     </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
+                      Comorbidities
+                    </label>
+                    <input
+                      value={form.conditions}
+                      onChange={(e) => update('conditions', e.target.value)}
+                      disabled={isSubmitting}
+                      placeholder="e.g. diabetes, hypertension"
+                      className="cl-input w-full text-sm"
+                      style={inputStyle}
+                    />
                   </div>
                 </div>
               </Field>

@@ -40,6 +40,7 @@ export default function AnalyticsChartsTabs({ overview }) {
   const tabs = useMemo(
     () => [
       { id: 'activity', label: 'Daily Activity' },
+      { id: 'conflicts', label: 'Contradictions' },
       { id: 'intents', label: 'Top Intents' },
       { id: 'sources', label: 'Source Distribution' }
     ],
@@ -47,6 +48,13 @@ export default function AnalyticsChartsTabs({ overview }) {
   );
 
   const dailyActivity = Array.isArray(overview?.daily_activity) ? overview.daily_activity : [];
+  const dailyConflicts = Array.isArray(overview?.daily_conflicts) && overview.daily_conflicts.length
+    ? overview.daily_conflicts
+    : dailyActivity.map((item) => ({
+        date: item.date,
+        conflicts: Number(item.conflicts || 0),
+        conflict_rate: Number(item.conflict_rate || 0)
+      }));
   const topIntents = Array.isArray(overview?.top_intents) ? overview.top_intents : [];
   const sourceDistribution = Array.isArray(overview?.source_distribution) ? overview.source_distribution : [];
 
@@ -126,6 +134,33 @@ export default function AnalyticsChartsTabs({ overview }) {
           <AnalyticsStateNotice
             title="Intent metrics unavailable"
             description="Top intents will appear after user queries are classified by the retrieval pipeline."
+          />
+        )
+      ) : null}
+
+      {activeTab === 'conflicts' ? (
+        dailyConflicts.length > 0 ? (
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={dailyConflicts} margin={{ top: 12, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="dailyConflicts" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="date" tick={{ fill: '#6d84a1', fontSize: 11 }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fill: '#6d84a1', fontSize: 11 }} tickLine={false} axisLine={false} />
+                <Tooltip content={<ChartTooltip />} />
+                <Area type="monotone" dataKey="conflicts" name="Conflict Signals" stroke="#f59e0b" fill="url(#dailyConflicts)" strokeWidth={2} />
+                <Area type="monotone" dataKey="conflict_rate" name="Conflict Rate %" stroke="#ef4444" fillOpacity={0} strokeWidth={1.5} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <AnalyticsStateNotice
+            title="No contradiction signals yet"
+            description="Conflict trend data appears once evidence contradiction events are logged."
           />
         )
       ) : null}

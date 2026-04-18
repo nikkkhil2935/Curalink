@@ -22,8 +22,9 @@ export default function LandingPage() {
     intent: '',
     city: '',
     country: '',
-    age: '',
-    sex: ''
+    ageRange: '',
+    sex: '',
+    conditions: ''
   });
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
@@ -138,8 +139,12 @@ export default function LandingPage() {
           country: form.country.trim()
         },
         demographics: {
-          age: form.age ? Number(form.age) : null,
-          sex: form.sex || null
+          ageRange: form.ageRange.trim(),
+          sex: form.sex || null,
+          conditions: form.conditions
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean)
         }
       });
 
@@ -255,6 +260,7 @@ export default function LandingPage() {
                   </label>
                   <input
                     id="condition"
+                    autoFocus
                     value={form.disease}
                     onChange={(event) => update('disease', event.target.value)}
                     placeholder="e.g., metastatic breast cancer"
@@ -297,6 +303,37 @@ export default function LandingPage() {
                 />
               </div>
 
+              <div className="grid gap-4 md:grid-cols-3">
+                <select
+                  value={form.ageRange}
+                  onChange={(event) => update('ageRange', event.target.value)}
+                  className="w-full rounded-xl px-3 py-2 text-sm focus:border-(--accent)"
+                >
+                  <option value="">Age range (optional)</option>
+                  <option value="0-18">0-18</option>
+                  <option value="19-30">19-30</option>
+                  <option value="31-50">31-50</option>
+                  <option value="51-70">51-70</option>
+                  <option value="71+">71+</option>
+                </select>
+                <select
+                  value={form.sex}
+                  onChange={(event) => update('sex', event.target.value)}
+                  className="w-full rounded-xl px-3 py-2 text-sm focus:border-(--accent)"
+                >
+                  <option value="">Sex (optional)</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+                <input
+                  value={form.conditions}
+                  onChange={(event) => update('conditions', event.target.value)}
+                  placeholder="Comorbidities (comma separated)"
+                  className="w-full rounded-xl px-3 py-2 text-sm focus:border-(--accent)"
+                />
+              </div>
+
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="submit"
@@ -307,6 +344,13 @@ export default function LandingPage() {
                   <ArrowRight className="h-4 w-4" />
                 </button>
                 <span className="text-xs token-text-subtle">Journey: Landing → Query → Results/Citations → Analytics</span>
+              </div>
+
+              <div className="rounded-xl border border-[color-mix(in_srgb,var(--accent)_30%,transparent)] bg-(--accent-soft) p-4">
+                <p className="text-sm font-semibold text-(--accent)">Have a medical report?</p>
+                <p className="mt-1 text-xs token-text-muted">
+                  Upload lab results or clinical notes after starting your session. Curalink will analyze them and produce research-backed answers for your specific findings.
+                </p>
               </div>
             </form>
           </div>
