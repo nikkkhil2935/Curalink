@@ -41,7 +41,7 @@ const configuredOrigins = (process.env.FRONTEND_URL || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
-const allowWildcardCors = !isProduction && configuredOrigins.length === 0;
+const allowWildcardCors = configuredOrigins.length === 0 || configuredOrigins.includes('*');
 let mongoLastError = null;
 
 const mongoOptions = {
@@ -66,6 +66,11 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin || allowWildcardCors || configuredOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      if (isProduction) {
         callback(null, true);
         return;
       }
