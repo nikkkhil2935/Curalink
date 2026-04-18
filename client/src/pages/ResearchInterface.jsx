@@ -9,13 +9,12 @@ import LoadingOverlay from '@/components/ui/LoadingOverlay.jsx';
 import ErrorBanner from '@/components/ui/ErrorBanner.jsx';
 import { useAppStore } from '@/store/useAppStore.js';
 import { api, extractApiError } from '@/utils/api.js';
-import { clamp, cn } from '@/lib/utils.js';
+import { cn } from '@/lib/utils.js';
 
-const SIDEBAR_EXPANDED_WIDTH = 280;
 const SIDEBAR_COLLAPSED_WIDTH = 64;
-const EVIDENCE_DEFAULT_WIDTH = 420;
-const EVIDENCE_MIN_WIDTH = 320;
-const CHAT_MIN_WIDTH = 320;
+const CHAT_DESKTOP_WIDTH = 40;
+const EVIDENCE_DESKTOP_WIDTH = 40;
+const SIDEBAR_DESKTOP_WIDTH = 20;
 
 export default function ResearchInterface() {
   const { sessionId } = useParams();
@@ -35,9 +34,7 @@ export default function ResearchInterface() {
   const [retryToken, setRetryToken] = useState(0);
   const [mobileTab, setMobileTab] = useState('chat');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [evidenceWidth, setEvidenceWidth] = useState(EVIDENCE_DEFAULT_WIDTH);
   const mobileTabRefs = useRef([]);
-  const desktopLayoutRef = useRef(null);
 
   const mobileTabs = [
     { id: 'chat', label: 'Chat' },
@@ -74,76 +71,6 @@ export default function ResearchInterface() {
 
   const retryBootstrap = () => {
     setRetryToken((previous) => previous + 1);
-  };
-
-  const getEvidenceMaxWidth = () => {
-    const layoutWidth = desktopLayoutRef.current?.clientWidth || 0;
-    const activeSidebarWidth = isSidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH;
-    const maxByLayout = layoutWidth - activeSidebarWidth - CHAT_MIN_WIDTH - 8;
-    return Math.max(EVIDENCE_MIN_WIDTH, maxByLayout || EVIDENCE_MIN_WIDTH);
-  };
-
-  const clampEvidenceWidth = (candidate) => {
-    return clamp(candidate, EVIDENCE_MIN_WIDTH, getEvidenceMaxWidth());
-  };
-
-  const onEvidenceResizeKeyDown = (event) => {
-    const step = event.shiftKey ? 24 : 12;
-
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      setEvidenceWidth((previous) => clampEvidenceWidth(previous + step));
-      return;
-    }
-
-    if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      setEvidenceWidth((previous) => clampEvidenceWidth(previous - step));
-      return;
-    }
-
-    if (event.key === 'Home') {
-      event.preventDefault();
-      setEvidenceWidth(EVIDENCE_MIN_WIDTH);
-      return;
-    }
-
-    if (event.key === 'End') {
-      event.preventDefault();
-      setEvidenceWidth(getEvidenceMaxWidth());
-    }
-  };
-
-  const onEvidenceResizeStart = (event) => {
-    if (typeof window === 'undefined' || window.innerWidth < 768) {
-      return;
-    }
-
-    event.preventDefault();
-
-    const layoutBounds = desktopLayoutRef.current?.getBoundingClientRect();
-    if (!layoutBounds) {
-      return;
-    }
-
-    const sidebarWidth = isSidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH;
-
-    const onPointerMove = (moveEvent) => {
-      const nextWidth = layoutBounds.right - moveEvent.clientX - sidebarWidth;
-      setEvidenceWidth(clampEvidenceWidth(nextWidth));
-    };
-
-    const onPointerUp = () => {
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp, { once: true });
   };
 
   useEffect(() => {
@@ -276,16 +203,10 @@ export default function ResearchInterface() {
     };
   }, [location.search, messages, sessionId, setHighlightedMessage, setSelectedAssistantMessage, setSources]);
 
-  useEffect(() => {
-    const syncEvidenceWidth = () => {
-      setEvidenceWidth((previous) => clampEvidenceWidth(previous));
-    };
-
-    syncEvidenceWidth();
-
-    window.addEventListener('resize', syncEvidenceWidth);
-    return () => window.removeEventListener('resize', syncEvidenceWidth);
-  }, [isSidebarCollapsed]);
+  const collapsedContentWidth = `calc((100% - ${SIDEBAR_COLLAPSED_WIDTH}px) / 2)`;
+  const chatDesktopWidth = isSidebarCollapsed ? collapsedContentWidth : `${CHAT_DESKTOP_WIDTH}%`;
+  const evidenceDesktopWidth = isSidebarCollapsed ? collapsedContentWidth : `${EVIDENCE_DESKTOP_WIDTH}%`;
+  const sidebarDesktopWidth = isSidebarCollapsed ? `${SIDEBAR_COLLAPSED_WIDTH}px` : `${SIDEBAR_DESKTOP_WIDTH}%`;
 
   if (isBootstrapping) {
     return (
@@ -349,35 +270,23 @@ export default function ResearchInterface() {
           </section>
         </div>
 
-        <div ref={desktopLayoutRef} className="hidden h-full min-h-0 flex-1 overflow-hidden md:flex">
-          <section className="min-h-0 min-w-0 flex-1 overflow-hidden border-r token-border">
+        <div className="hidden h-full min-h-0 flex-1 overflow-hidden md:flex">
+          <section className="min-h-0 min-w-0 shrink-0 overflow-hidden border-r token-border" style={{ width: chatDesktopWidth }}>
             <ChatPanel />
           </section>
 
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize evidence panel"
-            tabIndex={0}
-            onPointerDown={onEvidenceResizeStart}
-            onKeyDown={onEvidenceResizeKeyDown}
-            className="group relative w-2 cursor-col-resize bg-[color-mix(in_srgb,var(--bg-surface-2)_70%,transparent)]"
-          >
-            <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-(--border-subtle) transition-colors duration-150 ease-out group-hover:bg-(--accent)" />
-          </div>
-
           <section
-            className="min-h-0 shrink-0 overflow-hidden border-r token-border"
-            style={{ width: `${evidenceWidth}px`, minWidth: `${EVIDENCE_MIN_WIDTH}px` }}
+            className="min-h-0 min-w-0 shrink-0 overflow-hidden border-r token-border"
+            style={{ width: evidenceDesktopWidth }}
           >
             <EvidencePanel />
           </section>
 
           <aside
             className={cn(
-              'min-h-0 shrink-0 overflow-hidden border-l token-border token-surface transition-[width] duration-150 ease-out',
-              isSidebarCollapsed ? 'w-16' : 'w-70'
+              'min-h-0 min-w-0 shrink-0 overflow-hidden border-l token-border token-surface transition-[width] duration-150 ease-out'
             )}
+            style={{ width: sidebarDesktopWidth }}
           >
             <Sidebar
               collapsed={isSidebarCollapsed}

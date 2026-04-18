@@ -14,7 +14,7 @@ import Analytics from '../../models/Analytics.js';
 
 const RERANK_SKIP_SIMILARITY_THRESHOLD = 0.97;
 
-export async function runRetrievalPipeline(session, userMessage, conversationHistory = []) {
+export async function runRetrievalPipeline(session, userMessage, conversationHistory = [], options = {}) {
   const startTime = Date.now();
   const stageTimingsMs = createStageTimings();
   const traceId = options.traceId || buildDeterministicTraceId(session?._id, userMessage, startTime);
