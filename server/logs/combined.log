@@ -209,3 +209,9 @@
 {"level":"info","message":"ClinicalTrials fetched 0 studies in 1610ms","timestamp":"2026-04-18T21:42:33.571Z"}
 {"level":"info","message":"PubMed fetched 200 articles in 7037ms","timestamp":"2026-04-18T21:42:38.994Z"}
 {"level":"info","message":"OpenAlex fetched 300 works in 7272ms","timestamp":"2026-04-18T21:42:39.231Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T22:00:23.996Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T22:00:28.333Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T22:00:33.986Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T22:00:37.914Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T22:00:42.800Z"}
+{"level":"info","message":"Server running on port 5000","timestamp":"2026-04-18T22:01:02.563Z"}

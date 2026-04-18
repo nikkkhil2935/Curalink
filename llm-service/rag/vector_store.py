@@ -1,10 +1,12 @@
+# pyright: reportUnknownVariableType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false, reportMissingParameterType=false, reportMissingTypeArgument=false, reportUnknownLambdaType=false
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
 import os
 import re
-from typing import Optional
+from typing import Any, Optional, cast
 
 import chromadb
 from chromadb.config import Settings
@@ -20,7 +22,7 @@ CHROMA_PERSIST_DIR = os.path.normpath(os.getenv("CHROMA_PERSIST_DIR", DEFAULT_CH
 EMBEDDING_MODEL_NAME = os.getenv("PDF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
 _embedding_model: Optional[SentenceTransformer] = None
-_chroma_client: Optional[chromadb.PersistentClient] = None
+_chroma_client: Optional[Any] = None
 
 
 def _safe_session_id(session_id: str) -> str:
@@ -39,7 +41,7 @@ def get_embedding_model() -> SentenceTransformer:
     return _embedding_model
 
 
-def get_chroma_client() -> chromadb.PersistentClient:
+def get_chroma_client() -> Any:
     global _chroma_client
     if _chroma_client is None:
         os.makedirs(CHROMA_PERSIST_DIR, exist_ok=True)
@@ -50,7 +52,7 @@ def get_chroma_client() -> chromadb.PersistentClient:
     return _chroma_client
 
 
-def get_or_create_collection(session_id: str) -> chromadb.Collection:
+def get_or_create_collection(session_id: str) -> Any:
     client = get_chroma_client()
     return client.get_or_create_collection(
         name=_collection_name(session_id),
@@ -62,7 +64,7 @@ def get_or_create_collection(session_id: str) -> chromadb.Collection:
     )
 
 
-def _sanitize_metadata_value(value):
+def _sanitize_metadata_value(value: Any) -> str | int | float | bool:
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
@@ -76,14 +78,14 @@ def _sanitize_metadata_value(value):
     return json.dumps(value, ensure_ascii=True, default=str)
 
 
-def _sanitize_metadata(metadata: dict) -> dict:
+def _sanitize_metadata(metadata: dict[str, Any]) -> dict[str, str | int | float | bool]:
     return {
         str(key): _sanitize_metadata_value(value)
         for key, value in (metadata or {}).items()
     }
 
 
-def _get_collection_if_exists(session_id: str) -> Optional[chromadb.Collection]:
+def _get_collection_if_exists(session_id: str) -> Optional[Any]:
     client = get_chroma_client()
     try:
         return client.get_collection(name=_collection_name(session_id))
@@ -91,7 +93,7 @@ def _get_collection_if_exists(session_id: str) -> Optional[chromadb.Collection]:
         return None
 
 
-def embed_and_store_chunks(chunks: list[Chunk], session_id: str) -> dict:
+def embed_and_store_chunks(chunks: list[Chunk], session_id: str) -> dict[str, Any]:
     if not chunks:
         return {
             "stored": 0,
@@ -103,17 +105,25 @@ def embed_and_store_chunks(chunks: list[Chunk], session_id: str) -> dict:
     model = get_embedding_model()
 
     texts = [chunk.text for chunk in chunks]
-    metadatas = [_sanitize_metadata(dict(chunk.metadata)) for chunk in chunks]
+    metadatas: list[dict[str, str | int | float | bool]] = [
+        _sanitize_metadata(dict(chunk.metadata))
+        for chunk in chunks
+    ]
     doc_id = str(metadatas[0].get("doc_id") or "")
 
-    embeddings = model.encode(
+    raw_embeddings = model.encode(
         texts,
         batch_size=32,
         show_progress_bar=False,
         normalize_embeddings=True,
     )
-    if hasattr(embeddings, "tolist"):
-        embeddings = embeddings.tolist()
+    if hasattr(raw_embeddings, "tolist"):
+        embeddings = cast(list[list[float]], raw_embeddings.tolist())
+    else:
+        embeddings = [
+            [float(value) for value in row]
+            for row in cast(list[list[float]], raw_embeddings)
+        ]
 
     ids = [
         f"{doc_id}_chunk_{int(metadata.get('chunk_index', index))}"
@@ -122,9 +132,9 @@ def embed_and_store_chunks(chunks: list[Chunk], session_id: str) -> dict:
 
     collection.upsert(
         ids=ids,
-        embeddings=[[float(value) for value in row] for row in embeddings],
+        embeddings=embeddings,
         documents=texts,
-        metadatas=metadatas,
+        metadatas=cast(Any, metadatas),
     )
 
     return {
@@ -134,8 +144,8 @@ def embed_and_store_chunks(chunks: list[Chunk], session_id: str) -> dict:
     }
 
 
-def _build_where_filter(doc_id_filter: Optional[str], require_abnormal: bool) -> Optional[dict]:
-    filters = []
+def _build_where_filter(doc_id_filter: Optional[str], require_abnormal: bool) -> Optional[dict[str, Any]]:
+    filters: list[dict[str, Any]] = []
 
     if doc_id_filter:
         filters.append({"doc_id": str(doc_id_filter)})
@@ -184,7 +194,7 @@ def hybrid_retrieve(
         query_embeddings=[query_embedding],
         n_results=max(top_k * 3, top_k),
         where=where_filter,
-        include=["documents", "metadatas", "distances"],
+        include=cast(Any, ["documents", "metadatas", "distances"]),
     )
 
     documents = (result.get("documents") or [[]])[0]
@@ -192,7 +202,7 @@ def hybrid_retrieve(
     distances = (result.get("distances") or [[]])[0]
 
     query_tokens = set(re.findall(r"[a-z0-9]+", query_text.lower()))
-    ranked: list[dict] = []
+    ranked: list[dict[str, Any]] = []
 
     for index, text in enumerate(documents):
         chunk_text = str(text or "")
@@ -241,7 +251,7 @@ def delete_session_collection(session_id: str) -> bool:
         return False
 
 
-def get_session_pdf_stats(session_id: str) -> dict:
+def get_session_pdf_stats(session_id: str) -> dict[str, Any]:
     collection = _get_collection_if_exists(session_id)
     if collection is None:
         return {
@@ -258,7 +268,7 @@ def get_session_pdf_stats(session_id: str) -> dict:
             "doc_count": 0,
         }
 
-    results = collection.get(include=["metadatas"])
+    results = collection.get(include=cast(Any, ["metadatas"]))
     metadatas = results.get("metadatas") or []
     doc_ids = sorted(
         {
