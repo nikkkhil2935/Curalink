@@ -37,11 +37,18 @@ const isProduction = process.env.NODE_ENV === 'production';
 const APP_VERSION = process.env.APP_VERSION || process.env.npm_package_version || '1.0.0';
 const DEFAULT_LOCAL_LLM_SERVICE_URL = 'http://127.0.0.1:8001';
 const DEFAULT_RENDER_LLM_SERVICE_URL = 'https://curalink-llm.onrender.com';
+const LLM_HEALTH_CACHE_TTL_MS = Math.max(1000, Number.parseInt(process.env.LLM_HEALTH_CACHE_TTL_MS || '15000', 10));
+const LLM_HEALTH_TIMEOUT_MS = Math.max(1000, Number.parseInt(process.env.LLM_HEALTH_TIMEOUT_MS || '4000', 10));
 const configuredOrigins = (process.env.FRONTEND_URL || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 const allowWildcardCors = configuredOrigins.length === 0 || configuredOrigins.includes('*');
+const llmHealthCache = {
+  status: null,
+  expiresAt: 0,
+  inFlight: null
+};
 let mongoLastError = null;
 
 const mongoOptions = {
@@ -81,7 +88,11 @@ app.use(
 );
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
-app.use(morgan('dev'));
+app.use(
+  morgan('dev', {
+    skip: (req) => req.path === '/health' || req.path === '/api/health'
+  })
+);
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -234,15 +245,22 @@ function normalizeServiceStatus(value, fallback = 'offline') {
   return fallback;
 }
 
-async function getLlmServiceStatus() {
+function resolveLlmServiceUrl() {
   const configuredUrl = String(process.env.LLM_SERVICE_URL || '').trim().replace(/\/+$/, '');
   const isLoopback = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(configuredUrl);
-  const llmServiceUrl = configuredUrl && !(isProduction && isLoopback)
+  return configuredUrl && !(isProduction && isLoopback)
     ? configuredUrl
     : (isProduction ? DEFAULT_RENDER_LLM_SERVICE_URL : DEFAULT_LOCAL_LLM_SERVICE_URL);
+}
+
+async function fetchLlmServiceStatus() {
+  const llmServiceUrl = resolveLlmServiceUrl();
 
   try {
-    const response = await fetch(`${llmServiceUrl}/health`);
+    const response = await fetch(`${llmServiceUrl}/health`, {
+      signal: AbortSignal.timeout(LLM_HEALTH_TIMEOUT_MS)
+    });
+
     if (!response.ok) {
       return 'offline';
     }
@@ -261,6 +279,30 @@ async function getLlmServiceStatus() {
   } catch (error) {
     return 'offline';
   }
+}
+
+async function getLlmServiceStatus() {
+  const now = Date.now();
+
+  if (llmHealthCache.status && llmHealthCache.expiresAt > now) {
+    return llmHealthCache.status;
+  }
+
+  if (llmHealthCache.inFlight) {
+    return llmHealthCache.inFlight;
+  }
+
+  llmHealthCache.inFlight = fetchLlmServiceStatus()
+    .then((status) => {
+      llmHealthCache.status = status;
+      llmHealthCache.expiresAt = Date.now() + LLM_HEALTH_CACHE_TTL_MS;
+      return status;
+    })
+    .finally(() => {
+      llmHealthCache.inFlight = null;
+    });
+
+  return llmHealthCache.inFlight;
 }
 
 function buildHealthPayload(dbStatus, llmStatus) {

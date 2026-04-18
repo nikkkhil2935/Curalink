@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, CircleAlert, CircleX, X } from 'lucide-react';
-import { api } from '@/utils/api.js';
+import { getSystemHealth } from '@/utils/api.js';
+
+const STATUS_POLL_INTERVAL_MS = 60000;
 
 function normalizeServiceStatus(value) {
   const normalized = String(value || '').trim().toLowerCase();
@@ -40,7 +42,7 @@ export default function SystemStatusBanner() {
 
   const refreshStatus = useCallback(async () => {
     try {
-      const { data } = await api.get('/health', { timeout: 8000 });
+      const data = await getSystemHealth({ timeout: 8000 });
 
       const dbState = normalizeServiceStatus(data?.db || data?.services?.db);
       const llmState = normalizeServiceStatus(data?.llm || data?.services?.llm);
@@ -53,12 +55,42 @@ export default function SystemStatusBanner() {
   }, []);
 
   useEffect(() => {
-    void refreshStatus();
-    const timer = setInterval(() => {
-      void refreshStatus();
-    }, 30_000);
+    let disposed = false;
 
-    return () => clearInterval(timer);
+    const run = async () => {
+      if (disposed) {
+        return;
+      }
+
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+
+      await refreshStatus();
+    };
+
+    const onVisibilityChange = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        void run();
+      }
+    };
+
+    void run();
+    const timer = setInterval(() => {
+      void run();
+    }, STATUS_POLL_INTERVAL_MS);
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
+
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
+    };
   }, [refreshStatus]);
 
   const allGreen = useMemo(

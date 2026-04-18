@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, AlertTriangle, ServerCrash } from 'lucide-react';
 import Card from '@/components/ui/Card.jsx';
-import { api } from '@/utils/api.js';
+import { getSystemHealth } from '@/utils/api.js';
+
+const STATUS_POLL_INTERVAL_MS = 30000;
 
 function normalizeStatus(healthPayload) {
   if (!healthPayload || typeof healthPayload !== 'object') {
@@ -54,7 +56,7 @@ export default function SystemStatusWidget({ avgLatencyMs = 0 }) {
 
   const fetchHealth = useCallback(async () => {
     try {
-      const { data } = await api.get('/health');
+      const data = await getSystemHealth();
       setHealth(data || null);
       setError('');
       setLastCheckedAt(new Date());
@@ -72,17 +74,35 @@ export default function SystemStatusWidget({ avgLatencyMs = 0 }) {
       if (disposed) {
         return;
       }
+
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+
       await fetchHealth();
+    };
+
+    const onVisibilityChange = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        void run();
+      }
     };
 
     void run();
     const intervalId = setInterval(() => {
       void run();
-    }, 10000);
+    }, STATUS_POLL_INTERVAL_MS);
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
 
     return () => {
       disposed = true;
       clearInterval(intervalId);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
     };
   }, [fetchHealth]);
 
