@@ -40,15 +40,7 @@ const configuredOrigins = (process.env.FRONTEND_URL || '')
   .map((origin) => origin.trim())
   .filter(Boolean);
 const allowWildcardCors = !isProduction && configuredOrigins.length === 0;
-<<<<<<< HEAD
-
 let mongoLastError = null;
-let mongoRetryHandle = null;
-let mongoMode = 'disconnected';
-let memoryServer = null;
-=======
-let mongoLastError = null;
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
 const mongoOptions = {
   serverSelectionTimeoutMS: Number.parseInt(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || '5000', 10),
@@ -124,114 +116,6 @@ function sanitizeMongoUri(uri) {
   }
 }
 
-<<<<<<< HEAD
-function getMongoCandidates() {
-  const candidates = [];
-  const seenUris = new Set();
-
-  const pushCandidate = (uri, label) => {
-    const normalized = typeof uri === 'string' ? uri.trim() : '';
-    if (!normalized || seenUris.has(normalized)) {
-      return;
-    }
-
-    seenUris.add(normalized);
-    candidates.push({ uri: normalized, label });
-  };
-
-  pushCandidate(process.env.MONGODB_URI, 'primary');
-  pushCandidate(process.env.MONGODB_URI_FALLBACK, 'fallback');
-
-  const allowLocalFallback = (process.env.MONGODB_ALLOW_LOCAL_FALLBACK || 'false').toLowerCase() === 'true';
-  if (allowLocalFallback) {
-    pushCandidate(process.env.MONGODB_URI_LOCAL, 'local');
-  }
-
-  if (candidates.length === 0) {
-    logger.error('No MongoDB URI configured. Set MONGODB_URI (and optional fallback/local variables).');
-  }
-
-  return candidates;
-}
-
-async function connectMongoUri(uri, label) {
-  try {
-    await mongoose.connect(uri, mongoOptions);
-    mongoLastError = null;
-    mongoMode = label;
-    logger.info(`MongoDB connected (${label})`);
-    return true;
-  } catch (err) {
-    mongoLastError = err.message;
-    logger.error(`MongoDB connection error (${label}: ${sanitizeMongoUri(uri)}): ${err.message}`);
-    return false;
-  }
-}
-
-async function connectInMemoryMongo() {
-  try {
-    const { MongoMemoryServer } = await import('mongodb-memory-server');
-    memoryServer = await MongoMemoryServer.create({
-      instance: { dbName: 'curalink' }
-    });
-
-    const inMemoryUri = memoryServer.getUri();
-    const connected = await connectMongoUri(inMemoryUri, 'memory');
-
-    if (!connected && memoryServer) {
-      await memoryServer.stop();
-      memoryServer = null;
-    }
-
-    return connected;
-  } catch (err) {
-    mongoLastError = `In-memory MongoDB unavailable: ${err.message}`;
-    logger.error(`MongoDB in-memory fallback error: ${err.message}`);
-    return false;
-  }
-}
-
-function scheduleMongoReconnect() {
-  if (mongoRetryHandle) {
-    return;
-  }
-
-  mongoRetryHandle = setTimeout(async () => {
-    mongoRetryHandle = null;
-    if (mongoose.connection.readyState !== 1) {
-      await bootstrapMongoConnection();
-    }
-  }, mongoRetryMs);
-}
-
-async function bootstrapMongoConnection() {
-  if (mongoose.connection.readyState === 1) {
-    return;
-  }
-
-  for (const candidate of getMongoCandidates()) {
-    const connected = await connectMongoUri(candidate.uri, candidate.label);
-    if (connected) {
-      return;
-    }
-  }
-
-  const allowMemoryFallback =
-    (process.env.MONGODB_MEMORY_FALLBACK || (!isProduction ? 'true' : 'false')).toLowerCase() !== 'false';
-
-  if (allowMemoryFallback) {
-    const connected = await connectInMemoryMongo();
-    if (connected) {
-      return;
-    }
-  }
-
-  mongoMode = 'disconnected';
-  scheduleMongoReconnect();
-}
-
-=======
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 mongoose.connection.on('error', (err) => {
   mongoLastError = err.message;
 });
@@ -303,11 +187,7 @@ app.use('/api', (req, res, next) => {
 
   if (mongoose.connection.readyState !== 1) {
     return res.status(503).json({
-<<<<<<< HEAD
-      error: `Database is unavailable. Verify database connectivity and retry.`
-=======
       error: 'Database is unavailable (Atlas disconnected). Verify MONGODB_URI connectivity and retry.'
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     });
   }
 
@@ -320,9 +200,6 @@ app.use('/api', bookmarksRouter);
 app.use('/api', queryRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
-<<<<<<< HEAD
-async function healthHandler(req, res) {
-=======
 function normalizeServiceStatus(value, fallback = 'offline') {
   const normalized = String(value || '').trim().toLowerCase();
 
@@ -342,7 +219,6 @@ function normalizeServiceStatus(value, fallback = 'offline') {
 }
 
 async function getLlmServiceStatus() {
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
   const llmServiceUrl = process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001';
 
   try {
@@ -399,25 +275,8 @@ async function healthHandler(req, res) {
   return res.status(200).json(payload);
 }
 
-<<<<<<< HEAD
-  return res.json({
-    status: apiStatus,
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    mongodbMode: mongoMode,
-    ...(isProduction ? {} : { mongodbError: mongoLastError }),
-    llm: llmStatus,
-    llmProvider,
-    llmQuality,
-    timestamp: new Date().toISOString()
-  });
-}
-
-app.get('/api/health', healthHandler);
-app.get('/health', healthHandler);
-=======
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
 async function shutdown() {
   stopAnalyticsScheduler();

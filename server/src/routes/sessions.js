@@ -4,19 +4,6 @@ import Session from '../models/Session.js';
 import Message from '../models/Message.js';
 import SourceDoc from '../models/SourceDoc.js';
 import Analytics from '../models/Analytics.js';
-<<<<<<< HEAD
-import { buildSessionInsights } from '../services/sessionInsights.js';
-import { gzipCompression } from '../middleware/gzipCompression.js';
-import {
-  getCachedSessionInsights,
-  setCachedSessionInsights,
-  invalidateSessionInsightsCache
-} from '../services/insightsCache.js';
-import logger from '../lib/logger.js';
-
-const router = express.Router();
-router.use(gzipCompression());
-=======
 import { buildInsightsPayload } from '../services/sessionInsights.js';
 import {
   insightsResponseCache,
@@ -27,7 +14,6 @@ import { invalidateSessionQueryCache } from '../services/queryResultCache.js';
 
 const router = express.Router();
 export const bookmarksRouter = express.Router();
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 const ALLOWED_SEX_VALUES = new Set(['Male', 'Female', 'Other']);
 
 function normalizeText(value) {
@@ -570,12 +556,8 @@ router.delete('/:id', async (req, res, next) => {
       Analytics.deleteMany({ sessionId: req.params.id })
     ]);
 
-<<<<<<< HEAD
-    invalidateSessionInsightsCache(req.params.id);
-=======
     invalidateInsightsCache(req.params.id);
     invalidateSessionQueryCache(req.params.id);
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
     return res.json({ message: 'Session deleted' });
   } catch (err) {

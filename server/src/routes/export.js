@@ -1,17 +1,10 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import Analytics from '../models/Analytics.js';
-<<<<<<< HEAD
-import { gzipCompression } from '../middleware/gzipCompression.js';
-
-const router = express.Router();
-router.use(gzipCompression());
-=======
 import { buildCsvExport, buildPdfExport, createSessionExportPayload } from '../services/export.js';
 
 const router = express.Router();
 const ALLOWED_FORMATS = new Set(['pdf', 'json', 'csv']);
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
 function toSafeFileName(value) {
   return String(value || 'session')

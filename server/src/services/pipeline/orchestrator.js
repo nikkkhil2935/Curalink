@@ -12,13 +12,9 @@ import SourceDoc from '../../models/SourceDoc.js';
 import logger from '../../lib/logger.js';
 import Analytics from '../../models/Analytics.js';
 
-<<<<<<< HEAD
-export async function runRetrievalPipeline(session, userMessage, conversationHistory = [], options = {}) {
-=======
 const RERANK_SKIP_SIMILARITY_THRESHOLD = 0.97;
 
 export async function runRetrievalPipeline(session, userMessage, conversationHistory = []) {
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
   const startTime = Date.now();
   const stageTimingsMs = createStageTimings();
   const traceId = options.traceId || buildDeterministicTraceId(session?._id, userMessage, startTime);
@@ -82,13 +78,8 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     };
     const structuredAnswer = createNoEvidenceStructuredAnswer(session.disease, userMessage);
     stats.rerankedTo = 0;
-<<<<<<< HEAD
-    stageTimingsMs.total = Date.now() - startTime;
-    stats.timeTakenMs = stageTimingsMs.total;
-=======
     stats.pipeline_timings = [];
     stats.timeTakenMs = Date.now() - startTime;
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
     const trace = {
       llm: {
@@ -128,11 +119,7 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
       expandedQuery: expanded,
       contextBadge,
       sourceIndex: {},
-<<<<<<< HEAD
-      trace: llmTrace
-=======
       trace
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     };
   }
 
@@ -158,21 +145,6 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     .slice(0, Math.max(0, 100 - seededPool.length));
   const semanticInput = [...seededPool, ...backfill].slice(0, 100);
 
-<<<<<<< HEAD
-  const semanticSkipThreshold = getSemanticSkipThreshold();
-  const topContextSimilarity = computeTopContextSimilarity(expanded.fullQuery, semanticInput, 20);
-  const skipSemanticRerank = topContextSimilarity >= semanticSkipThreshold;
-
-  let ranked = [];
-  if (skipSemanticRerank) {
-    ranked = semanticInput;
-    stats.rerankSkipped = true;
-  } else {
-    ranked = await semanticRerank(expanded.fullQuery, semanticInput);
-    stats.rerankSkipped = false;
-  }
-  stats.rerankSkipSimilarity = Number(topContextSimilarity.toFixed(4));
-=======
   const bestSimilarity = Number(keywordRanked[0]?.relevanceScore || 0);
   const shouldSkipSemanticRerank = bestSimilarity >= RERANK_SKIP_SIMILARITY_THRESHOLD;
   const ranked = shouldSkipSemanticRerank
@@ -180,7 +152,6 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     : await semanticRerank(expanded.fullQuery, semanticInput);
   stats.queryContextSimilarity = bestSimilarity;
   stats.semanticRerankSkipped = shouldSkipSemanticRerank;
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
   const minTrialsForContext = ctResults.length > 0 ? (intentType === 'CLINICAL_TRIALS' ? 2 : 1) : 0;
   const contextDocs = selectForContext(ranked, 8, 5, { minTrials: minTrialsForContext });
@@ -247,27 +218,6 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
   };
   try {
     const llmData = await callLLM(systemPrompt, userPrompt);
-<<<<<<< HEAD
-    llmTrace.provider = llmData?.provider || null;
-    llmTrace.cacheHit = Boolean(llmData?.cache_hit);
-    llmTrace.cacheSimilarity = Number.isFinite(Number(llmData?.cache_similarity))
-      ? Number(Number(llmData.cache_similarity).toFixed(4))
-      : null;
-    llmTrace.pipelineTimings = Array.isArray(llmData?.pipeline_timings)
-      ? llmData.pipeline_timings
-          .map((timing) => ({
-            stage: String(timing?.stage || '').trim(),
-            duration_ms: Number(timing?.duration_ms || 0)
-          }))
-          .filter((timing) => timing.stage && Number.isFinite(timing.duration_ms) && timing.duration_ms >= 0)
-      : [];
-
-    if (llmTrace.pipelineTimings.length) {
-      const llmPipelineTotalMs = llmTrace.pipelineTimings.reduce((total, timing) => total + timing.duration_ms, 0);
-      stageTimingsMs.llm = Math.max(stageTimingsMs.llm, Math.round(llmPipelineTotalMs));
-      stats.llmPipelineStageCount = llmTrace.pipelineTimings.length;
-    }
-=======
     const pipelineTimings = Array.isArray(llmData?.pipeline_timings) ? llmData.pipeline_timings : [];
     trace = {
       llm: {
@@ -278,7 +228,6 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
       },
       pipeline_timings: pipelineTimings
     };
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
     structuredAnswer = parseLLMResponse(llmData, {
       allowedCitationIds: Object.keys(sourceIndex || {}),
@@ -306,13 +255,8 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
 
   const responseText = buildPlainTextSummary(structuredAnswer, stats);
 
-<<<<<<< HEAD
-  stageTimingsMs.total = Date.now() - startTime;
-  stats.timeTakenMs = stageTimingsMs.total;
-=======
   stats.pipeline_timings = trace.pipeline_timings;
   stats.timeTakenMs = Date.now() - startTime;
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
   await Analytics.create({
     event: 'query',
@@ -341,17 +285,7 @@ export async function runRetrievalPipeline(session, userMessage, conversationHis
     expandedQuery: expanded,
     contextBadge,
     sourceIndex,
-<<<<<<< HEAD
-    trace: {
-      ...llmTrace,
-      rerankSkipped: Boolean(stats.rerankSkipped),
-      rerankSimilarity: Number.isFinite(Number(stats.rerankSkipSimilarity))
-        ? Number(stats.rerankSkipSimilarity)
-        : null
-    }
-=======
     trace
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
   };
 }
 

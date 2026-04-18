@@ -1,10 +1,6 @@
 # PROJECT CONTEXT
 
-<<<<<<< HEAD
-Last Updated: 2026-04-17T11:18:50.082Z
-=======
 Last Updated: 2026-04-18T11:09:11.978Z
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 Workspace: Curalink
 
 ## What This Is
@@ -239,9 +235,5 @@ Workspace: Curalink
 - PROJECT_CONTEXT.json
 - PROJECT_CONTEXT.md
 - README.md
-<<<<<<< HEAD
-- TODO.md
-=======
 - start.js
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 

@@ -86,24 +86,10 @@ const messageSchema = new mongoose.Schema(
       openalexFetched: Number,
       ctFetched: Number,
       rerankedTo: Number,
-<<<<<<< HEAD
-      timeTakenMs: Number,
-      stageTimingsMs: {
-        intent: Number,
-        expansion: Number,
-        retrieval: Number,
-        normalization: Number,
-        rerank: Number,
-        context: Number,
-        llm: Number,
-        total: Number
-      }
-=======
       queryContextSimilarity: Number,
       semanticRerankSkipped: Boolean,
       pipeline_timings: [pipelineTimingSchema],
       timeTakenMs: Number
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     },
     trace: {
       llm: {
@@ -130,10 +116,6 @@ const messageSchema = new mongoose.Schema(
 
 messageSchema.index({ sessionId: 1, createdAt: 1 });
 messageSchema.index({ sessionId: 1, role: 1, createdAt: -1 });
-<<<<<<< HEAD
-messageSchema.index({ sessionId: 1, role: 1, 'retrievalStats.traceId': 1, createdAt: -1 });
-=======
 messageSchema.index({ isBookmarked: 1, bookmarkedAt: -1 });
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
 export default mongoose.model('Message', messageSchema);

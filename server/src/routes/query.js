@@ -3,18 +3,12 @@ import mongoose from 'mongoose';
 import Session from '../models/Session.js';
 import Message from '../models/Message.js';
 import { runRetrievalPipeline } from '../services/pipeline/orchestrator.js';
-<<<<<<< HEAD
-import { gzipCompression } from '../middleware/gzipCompression.js';
-import { invalidateSessionInsightsCache } from '../services/insightsCache.js';
-import { applyHealthResponseContractPatch } from '../services/healthContract.js';
-=======
 import { generateSmartSuggestions } from '../services/llm.js';
 import { invalidateInsightsCache } from '../middleware/insightsCache.js';
 import {
   getCachedQueryResult,
   setCachedQueryResult
 } from '../services/queryResultCache.js';
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
 const router = express.Router();
 applyHealthResponseContractPatch();
@@ -166,11 +160,7 @@ router.post('/sessions/:id/query', async (req, res, next) => {
       contextBadge,
       sourceIndex,
       trace
-<<<<<<< HEAD
-    } = await runRetrievalPipeline(session, cleanedMessage, conversationHistory.reverse());
-=======
     } = pipelineResult;
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
     const createMessagesAndUpdateSession = async (dbSession = null) => {
       const writeOptions = dbSession ? { session: dbSession, ordered: true } : { ordered: true };
@@ -253,12 +243,6 @@ router.post('/sessions/:id/query', async (req, res, next) => {
         .map((entry) => [String(entry.source_id).toUpperCase(), entry])
     );
 
-<<<<<<< HEAD
-    const sourcesWithCitations = (contextDocs || []).map((doc) => ({
-      ...doc,
-      citationId: idToCitation[String(doc.id)] || null
-    }));
-=======
     const sourceDocsForPanel = Array.isArray(evidenceDocs) && evidenceDocs.length
       ? evidenceDocs
       : (contextDocs || []);
@@ -282,7 +266,6 @@ router.post('/sessions/:id/query', async (req, res, next) => {
           : fallbackConfidence
       };
     });
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
     invalidateSessionInsightsCache(session._id);
 

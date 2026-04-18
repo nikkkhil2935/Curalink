@@ -1,26 +1,4 @@
 import axios from 'axios';
-<<<<<<< HEAD
-import http from 'node:http';
-import https from 'node:https';
-import logger from '../lib/logger.js';
-
-const LLM_SERVICE_URL = process.env.LLM_SERVICE_URL || 'http://127.0.0.1:8001';
-const LLM_TIMEOUT_MS = Number.parseInt(process.env.LLM_REQUEST_TIMEOUT_MS || '120000', 10);
-const EMBED_TIMEOUT_MS = Number.parseInt(process.env.LLM_EMBED_TIMEOUT_MS || '30000', 10);
-const KEEP_ALIVE_MAX_SOCKETS = Number.parseInt(process.env.LLM_KEEP_ALIVE_MAX_SOCKETS || '64', 10);
-const KEEP_ALIVE_MAX_FREE_SOCKETS = Number.parseInt(process.env.LLM_KEEP_ALIVE_MAX_FREE_SOCKETS || '16', 10);
-
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  maxSockets: KEEP_ALIVE_MAX_SOCKETS,
-  maxFreeSockets: KEEP_ALIVE_MAX_FREE_SOCKETS
-});
-
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: KEEP_ALIVE_MAX_SOCKETS,
-  maxFreeSockets: KEEP_ALIVE_MAX_FREE_SOCKETS
-=======
 import { Agent as HttpAgent } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
 
@@ -40,20 +18,10 @@ const llmHttpsAgent = new HttpsAgent({
   keepAliveMsecs: LLM_KEEP_ALIVE_MS,
   maxSockets: LLM_MAX_SOCKETS,
   maxFreeSockets: 10
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 });
 
 const llmClient = axios.create({
   baseURL: LLM_SERVICE_URL,
-<<<<<<< HEAD
-  timeout: LLM_TIMEOUT_MS,
-  httpAgent,
-  httpsAgent,
-  headers: {
-    Connection: 'keep-alive'
-  }
-});
-=======
   timeout: 120000,
   httpAgent: llmHttpAgent,
   httpsAgent: llmHttpsAgent
@@ -88,7 +56,6 @@ export async function generateSmartSuggestions({ partialQuery, history, commonTo
 
   return normalizeSuggestions(data?.suggestions, limit);
 }
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
 /**
  * Call LLM service for RAG generation.
@@ -121,11 +88,7 @@ export async function callLLM(systemPrompt, userPrompt) {
  */
 export async function getEmbeddings(texts) {
   try {
-<<<<<<< HEAD
-    const { data } = await llmClient.post('/embed', { texts }, { timeout: EMBED_TIMEOUT_MS });
-=======
     const { data } = await llmClient.post('/embed', { texts }, { timeout: 30000 });
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     return data.embeddings;
   } catch (err) {
     logger.warn('Embedding service unavailable, falling back to keyword scoring');
@@ -177,12 +140,6 @@ export async function semanticRerank(query, documents) {
  * Parse and validate LLM response with resilient fallback behavior.
  */
 export function parseLLMResponse(llmData, options = {}) {
-<<<<<<< HEAD
-  const allowedCitationIds = normalizeAllowedCitationIds(options.allowedCitationIds);
-
-  if (llmData?.parsed !== null && llmData?.parsed !== undefined) {
-    const normalized = normalizeStructuredAnswer(llmData.parsed, allowedCitationIds);
-=======
   const allowedCitationIds = Array.isArray(options.allowedCitationIds)
     ? options.allowedCitationIds.map((id) => String(id).toUpperCase())
     : [];
@@ -190,36 +147,16 @@ export function parseLLMResponse(llmData, options = {}) {
 
   if (llmData?.parsed) {
     const normalized = normalizeStructuredAnswer(llmData.parsed, allowedCitationIds, contextDocs);
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     if (isValidStructuredAnswer(normalized)) {
       return normalized;
     }
   }
 
-<<<<<<< HEAD
-  if (typeof llmData?.text === 'string') {
-    const cleanedText = stripMarkdownCodeFences(llmData.text).trim();
-    const parsedFromCleanText = tryParseJson(cleanedText);
-    if (parsedFromCleanText) {
-      const normalized = normalizeStructuredAnswer(parsedFromCleanText, allowedCitationIds);
-      if (isValidStructuredAnswer(normalized)) {
-        return normalized;
-      }
-    }
-
-    const parsedFromObjectMatch = extractFirstObjectJson(llmData.text);
-    if (parsedFromObjectMatch) {
-      const normalized = normalizeStructuredAnswer(parsedFromObjectMatch, allowedCitationIds);
-      if (isValidStructuredAnswer(normalized)) {
-        return normalized;
-      }
-=======
   const parsedFromText = extractJsonPayload(llmData?.text || '');
   if (parsedFromText) {
     const normalized = normalizeStructuredAnswer(parsedFromText, allowedCitationIds, contextDocs);
     if (isValidStructuredAnswer(normalized)) {
       return normalized;
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
     }
   }
 
@@ -275,14 +212,10 @@ function createParserFallback(options = {}, allowedCitationIds = []) {
     ? options.evidenceStrengthLabel
     : 'LIMITED';
   const disease = options.disease || 'this condition';
-<<<<<<< HEAD
-  const contextDocs = Array.isArray(options.contextDocs) ? options.contextDocs : [];
-=======
   const fallbackBreakdown = buildDefaultConfidenceBreakdown(
     options.allowedCitationIds,
     options.contextDocs
   );
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 
   const publicationCitations = allowedCitationIds.filter((id) => /^P\d+$/.test(id));
   const trialCitations = allowedCitationIds.filter((id) => /^T\d+$/.test(id));
@@ -337,14 +270,9 @@ function createParserFallback(options = {}, allowedCitationIds = []) {
       'Can you summarize the strongest findings from the listed sources?',
       'Can you focus on recruiting clinical trials near my location?',
       'Can you compare benefits and risks from the top studies?'
-<<<<<<< HEAD
-    ]
-  }, allowedCitationIds);
-=======
     ],
     confidence_breakdown: fallbackBreakdown
   };
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
 }
 
 function isValidStructuredAnswer(obj) {
@@ -355,16 +283,6 @@ function isValidStructuredAnswer(obj) {
     obj.condition_overview.trim().length > 0 &&
     Array.isArray(obj.research_insights) &&
     Array.isArray(obj.clinical_trials) &&
-<<<<<<< HEAD
-    typeof obj.recommendations === 'string' &&
-    Array.isArray(obj.follow_up_suggestions) &&
-    obj.follow_up_suggestions.length === 3
-  );
-}
-
-function normalizeStructuredAnswer(answer, allowedCitationIds = []) {
-  const safeAnswer = answer && typeof answer === 'object' ? answer : {};
-=======
     Array.isArray(obj.follow_up_suggestions) &&
     Array.isArray(obj.confidence_breakdown)
   );
@@ -416,7 +334,6 @@ function buildDefaultConfidenceBreakdown(allowedCitationIds = [], contextDocs = 
 }
 
 function normalizeStructuredAnswer(answer, allowedCitationIds = [], contextDocs = []) {
->>>>>>> 0da9de8 (feat(chat): enhance MessageBubble with citation export functionality and improved UI)
   const allowedSet = new Set(
     normalizeAllowedCitationIds(allowedCitationIds)
   );

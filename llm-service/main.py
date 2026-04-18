@@ -18,7 +18,6 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ValidationError, field_validator
-from cache.semantic_cache import SemanticLRUCache
 
 langchain_import_error: Optional[str] = None
 ChatPromptTemplate: Any = None
@@ -54,7 +53,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Curalink LLM Service", version="1.0.0")
-SERVICE_START_AT = time.time()
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,17 +77,10 @@ LAST_GENERATION_PROVIDER = "none"
 LAST_GENERATION_AT: Optional[float] = None
 EMBEDDING_BACKEND = "hash-fallback"
 EMBEDDING_MODEL = "hash-fallback"
-SEMANTIC_CACHE_TTL_SEC = max(30.0, float(os.getenv("SEMANTIC_CACHE_TTL_SEC", "300")))
-SEMANTIC_CACHE_MAX_ENTRIES = max(10, int(os.getenv("SEMANTIC_CACHE_MAX_ENTRIES", "300")))
-SEMANTIC_CACHE_SIMILARITY_THRESHOLD = max(
-    0.0,
-    min(1.0, float(os.getenv("SEMANTIC_CACHE_SIMILARITY_THRESHOLD", "0.92"))),
-)
-semantic_response_cache = SemanticLRUCache(
-    max_entries=SEMANTIC_CACHE_MAX_ENTRIES,
-    ttl_seconds=SEMANTIC_CACHE_TTL_SEC,
-    similarity_threshold=SEMANTIC_CACHE_SIMILARITY_THRESHOLD,
-)
+SERVICE_STARTED_AT = time.time()
+
+semantic_response_cache: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
+semantic_cache_lock = asyncio.Lock()
 
 embed_model = None
 if SentenceTransformer is not None and np is not None:
@@ -239,82 +230,6 @@ def extract_allowed_citations(text: str) -> List[str]:
             seen.add(citation_id)
 
     return citations
-
-
-def normalize_cache_query_text(value: str) -> str:
-    normalized = re.sub(r"\s+", " ", str(value or "")).strip().lower()
-    if not normalized:
-        return ""
-
-    normalized = re.sub(r"\[(?:P|T)\d+\]", "", normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r"\s+", " ", normalized).strip()
-    return normalized[:600]
-
-
-def extract_cache_query_text(user_prompt: str) -> str:
-    prompt = str(user_prompt or "")
-    match = re.search(
-        r'USER QUESTION:\s*"([\s\S]*?)"\s*(?:\n\n|\nSOURCES|$)',
-        prompt,
-        flags=re.IGNORECASE,
-    )
-    if match:
-        return normalize_cache_query_text(match.group(1))
-
-    before_sources = prompt.split("\nSOURCES", 1)[0]
-    return normalize_cache_query_text(before_sources or prompt)
-
-
-def append_pipeline_timing(
-    pipeline_timings: List[Dict[str, Any]],
-    stage: str,
-    started_at: float,
-) -> None:
-    elapsed_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
-    pipeline_timings.append({"stage": stage, "duration_ms": round(elapsed_ms, 3)})
-
-
-def sanitize_pipeline_timings(pipeline_timings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    sanitized: List[Dict[str, Any]] = []
-    for item in pipeline_timings or []:
-        stage = str(item.get("stage") or "").strip()
-        duration_ms = float(item.get("duration_ms") or 0.0)
-        if not stage or duration_ms < 0:
-            continue
-        sanitized.append({"stage": stage, "duration_ms": round(duration_ms, 3)})
-
-    return sanitized
-
-
-def build_generate_response(
-    *,
-    text: str,
-    parsed: Dict[str, Any],
-    model_name: str,
-    provider: str,
-    elapsed_seconds: float,
-    provider_errors: List[str],
-    validation_error: Optional[str],
-    fallback_used: bool,
-    fallback_reason: Optional[str],
-    pipeline_timings: List[Dict[str, Any]],
-    cache_hit: bool,
-    cache_similarity: Optional[float],
-) -> Dict[str, Any]:
-    return {
-        "text": text,
-        "parsed": parsed,
-        "model": model_name,
-        "provider": provider,
-        "elapsed_seconds": round(elapsed_seconds, 3),
-        "provider_errors": provider_errors,
-        "validation_error": validation_error,
-        "fallback_used": bool(fallback_used),
-        "fallback_reason": fallback_reason,
-        "pipeline_timings": sanitize_pipeline_timings(pipeline_timings),
-        "cache_hit": bool(cache_hit),
-        "cache_similarity": cache_similarity,
-    }
 
 
 def normalize_source_ids(source_ids: List[str], allowed_set: Set[str]) -> List[str]:
@@ -917,7 +832,7 @@ def normalize_suggestions(
 
 
 def parse_suggestion_candidates(raw_text: str) -> List[str]:
-    parsed = extract_json(raw_text)
+    parsed: Any = extract_json(raw_text)
 
     if isinstance(parsed, dict):
         raw_items = parsed.get("suggestions") or parsed.get("items") or []
@@ -1056,111 +971,47 @@ async def suggest(req: SuggestRequest):
     raw_candidates = parse_suggestion_candidates(raw_text)
     suggestions = normalize_suggestions(raw_candidates, partial_query, history, common_topics, req.limit)
 
-    llm_service_status = "online" if is_ready else "degraded"
-
     return {
-        "status": "ok" if is_ready else "degraded",
-        "version": app.version,
-        "uptime_ms": int((time.time() - SERVICE_START_AT) * 1000),
-        "services": {
-            "llm": llm_service_status,
-            "db": "n/a",
-        },
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "providers": {
-            "ollama": ollama_status,
-            "groq": groq_status,
-            "local": local_status,
-        },
-        "embeddings": {
-            "available": True,
-            "mode": embeddings_mode,
-            "model": embeddings_model,
-            "error": embeddings_error,
-        },
-        "workflow": {
-            "langgraph_enabled": bool(LANGGRAPH_WORKFLOW),
-            "langchain_error": langchain_import_error,
-            "langgraph_error": langgraph_import_error,
-        },
-        "effective_generation_provider": LAST_GENERATION_PROVIDER,
-        "effective_generation_age_seconds": last_generation_age,
+        "suggestions": suggestions,
+        "provider": provider,
+        "model": model_name,
     }
-
-
-@app.get("/api/health")
-async def api_health():
-    return await health()
 
 
 @app.post("/generate")
 async def generate(req: GenerateRequest):
     """Generate an LLM response using a LangGraph-orchestrated RAG flow."""
     global LAST_GENERATION_PROVIDER, LAST_GENERATION_AT
-    started_at = time.perf_counter()
-    logger.info("[generate:start] model=%s temp=%s", OLLAMA_MODEL, req.temperature)
-
-    allowed_citations = extract_allowed_citations(req.user_prompt)
+    flow_start = time.perf_counter()
     pipeline_timings: List[Dict[str, Any]] = []
 
-    cache_query = extract_cache_query_text(req.user_prompt)
-    workflow_mode = "langgraph" if LANGGRAPH_WORKFLOW is not None else "direct"
-    cache_namespace = f"{hashlib.sha1('|'.join(sorted(allowed_citations)).encode('utf-8')).hexdigest()[:12]}:{workflow_mode}"
-    cache_key = hashlib.sha1(f"{cache_namespace}:{cache_query}".encode("utf-8")).hexdigest()
-    cache_similarity: Optional[float] = None
-
-    embed_started = time.perf_counter()
-    query_embedding: List[float] = []
     try:
-        query_embedding = await build_cache_query_embedding(cache_query)
-    except Exception as cache_exc:
-        logger.warning("Semantic cache embedding unavailable: %s", cache_exc)
-    append_pipeline_timing(pipeline_timings, "query_embedding", embed_started)
+        provider_errors = []
 
-    cache_lookup_started = time.perf_counter()
-    cached_payload: Optional[Dict[str, Any]] = None
-    if query_embedding:
-        cached_payload, cache_similarity = semantic_response_cache.get(
-            query_embedding=query_embedding,
-            namespace=cache_namespace,
-        )
-    append_pipeline_timing(pipeline_timings, "semantic_cache_lookup", cache_lookup_started)
+        cache_lookup_start = time.perf_counter()
+        query_embedding = await generate_query_embedding(req.user_prompt)
+        cached_payload, cache_similarity = await lookup_semantic_cache(query_embedding)
+        add_stage_timing(pipeline_timings, "semantic_cache_lookup", cache_lookup_start)
 
-    if cached_payload:
-        elapsed_seconds = time.perf_counter() - started_at
-        cache_similarity = round(float(cache_similarity or 0.0), 4)
-        provider = str(cached_payload.get("provider") or "cache")
-        LAST_GENERATION_PROVIDER = provider
-        LAST_GENERATION_AT = time.time()
+        if cached_payload is not None:
+            LAST_GENERATION_PROVIDER = "semantic-cache"
+            LAST_GENERATION_AT = time.time()
 
-        logger.info("[generate:cache-hit] similarity=%.3f", cache_similarity)
-        return build_generate_response(
-            text=str(cached_payload.get("text") or ""),
-            parsed=dict(cached_payload.get("parsed") or {}),
-            model_name=str(cached_payload.get("model") or "cached-response"),
-            provider=provider,
-            elapsed_seconds=elapsed_seconds,
-            provider_errors=list(cached_payload.get("provider_errors") or []),
-            validation_error=cached_payload.get("validation_error"),
-            fallback_used=bool(cached_payload.get("fallback_used")),
-            fallback_reason=cached_payload.get("fallback_reason"),
-            pipeline_timings=pipeline_timings,
-            cache_hit=True,
-            cache_similarity=cache_similarity,
-        )
+            add_stage_timing(pipeline_timings, "total", flow_start)
 
-    provider_errors: List[str] = []
-    validation_error: Optional[str] = None
-    fallback_used = False
-    fallback_reason: Optional[str] = None
-    raw_text = ""
-    parsed: Dict[str, Any] = {}
-    provider = "local"
-    model_name = "curalink-local-fallback"
+            return {
+                "text": cached_payload.get("text", ""),
+                "parsed": cached_payload.get("parsed"),
+                "model": cached_payload.get("model", "cached"),
+                "provider": "semantic-cache",
+                "elapsed_seconds": round(time.perf_counter() - flow_start, 4),
+                "semantic_cache_hit": True,
+                "semantic_cache_similarity": round(max(cache_similarity, 0.0), 4),
+                "pipeline_timings": pipeline_timings,
+            }
 
-    try:
         if LANGGRAPH_WORKFLOW is not None:
-            workflow_started = time.perf_counter()
+            workflow_start = time.perf_counter()
             workflow_state = await LANGGRAPH_WORKFLOW.ainvoke(
                 {
                     "system_prompt": req.system_prompt,
@@ -1169,184 +1020,79 @@ async def generate(req: GenerateRequest):
                     "max_tokens": req.max_tokens,
                 }
             )
-            append_pipeline_timing(pipeline_timings, "workflow_invoke", workflow_started)
+            add_stage_timing(pipeline_timings, "langgraph_workflow", workflow_start)
 
-            raw_text = str(workflow_state.get("raw_text", ""))
-            provider = str(workflow_state.get("provider", "local"))
-            model_name = str(workflow_state.get("model", "curalink-local-fallback"))
-            provider_errors = list(workflow_state.get("provider_errors", []))
-            workflow_parsed = workflow_state.get("parsed")
-
-            if isinstance(workflow_parsed, dict):
-                parsed = workflow_parsed
-            else:
-                parse_started = time.perf_counter()
-                parsed = extract_json(raw_text) or {}
-                append_pipeline_timing(pipeline_timings, "parse_json", parse_started)
+            raw_text = workflow_state.get("raw_text", "")
+            parsed = workflow_state.get("parsed")
+            provider = workflow_state.get("provider", "local")
+            model_name = workflow_state.get("model", "curalink-local-fallback")
+            provider_errors = workflow_state.get("provider_errors", [])
         else:
-            invoke_started = time.perf_counter()
+            prepare_start = time.perf_counter()
+            allowed_citations = extract_allowed_citations(req.user_prompt)
             messages = build_prompt_messages(req.system_prompt, req.user_prompt)
             add_stage_timing(pipeline_timings, "prepare_messages", prepare_start)
 
             provider_start = time.perf_counter()
             provider_result = await invoke_provider_chain(req, messages, allowed_citations)
-            append_pipeline_timing(pipeline_timings, "provider_invoke", invoke_started)
+            add_stage_timing(pipeline_timings, "provider_generation", provider_start)
 
-            raw_text = str(provider_result["raw_text"])
-            provider = str(provider_result["provider"])
-            model_name = str(provider_result["model"])
-            provider_errors = list(provider_result.get("provider_errors", []))
+            raw_text = provider_result["raw_text"]
+            provider = provider_result["provider"]
+            model_name = provider_result["model"]
+            provider_errors = provider_result.get("provider_errors", [])
 
-            parse_started = time.perf_counter()
-            parsed = extract_json(raw_text) or {}
-            append_pipeline_timing(pipeline_timings, "parse_json", parse_started)
-
-        if parsed:
-            validation_started = time.perf_counter()
-            try:
+            parse_start = time.perf_counter()
+            parsed = extract_json(raw_text)
+            if parsed is not None:
                 parsed = ensure_structured_schema(parsed, allowed_citations)
-            except ValidationError as exc:
-                validation_error = str(exc)
-                fallback_used = True
-                fallback_reason = validation_error
+            elif provider == "local":
                 parsed = build_local_fallback_answer(req.user_prompt, allowed_citations)
-                raw_text = json.dumps(parsed, ensure_ascii=True)
-                provider = "local"
-                model_name = "curalink-local-fallback"
-            append_pipeline_timing(pipeline_timings, "schema_validation", validation_started)
-        else:
-            validation_error = "Provider response was not valid JSON."
-            fallback_used = True
-            fallback_reason = validation_error
-            parsed = build_local_fallback_answer(req.user_prompt, allowed_citations)
-            raw_text = json.dumps(parsed, ensure_ascii=True)
-            provider = "local"
-            model_name = "curalink-local-fallback"
+            else:
+                parsed = None
+            add_stage_timing(pipeline_timings, "parse_and_validate", parse_start)
 
-        if provider == "local":
-            fallback_used = True
-            fallback_reason = fallback_reason or "Local fallback provider response used."
+        cache_store_start = time.perf_counter()
+        await store_semantic_cache(
+            query_embedding,
+            {
+                "text": raw_text,
+                "parsed": parsed,
+                "model": model_name,
+                "provider": provider,
+            },
+        )
+        add_stage_timing(pipeline_timings, "semantic_cache_store", cache_store_start)
 
-        cache_store_started = time.perf_counter()
-        if query_embedding and cache_query and not fallback_used:
-            semantic_response_cache.set(
-                cache_key=cache_key,
-                query_embedding=query_embedding,
-                namespace=cache_namespace,
-                payload={
-                    "text": raw_text,
-                    "parsed": parsed,
-                    "model": model_name,
-                    "provider": provider,
-                    "provider_errors": provider_errors,
-                    "validation_error": validation_error,
-                    "fallback_used": fallback_used,
-                    "fallback_reason": fallback_reason,
-                },
-            )
-        append_pipeline_timing(pipeline_timings, "semantic_cache_store", cache_store_started)
+        add_stage_timing(pipeline_timings, "total", flow_start)
 
-        elapsed_seconds = time.perf_counter() - started_at
+        elapsed = round(time.perf_counter() - flow_start, 4)
         LAST_GENERATION_PROVIDER = provider
         LAST_GENERATION_AT = time.time()
-
         if provider_errors:
             logger.warning("Provider chain warnings: %s", " | ".join(provider_errors[:3]))
-        if fallback_used:
-            logger.warning("Structured fallback used: %s", fallback_reason or "unknown")
-        logger.info("LLM generated via %s in %ss, length=%s", provider, round(elapsed_seconds, 3), len(raw_text))
+        logger.info("LLM generated via %s in %ss, length=%s", provider, elapsed, len(raw_text))
 
-        return build_generate_response(
-            text=raw_text,
-            parsed=parsed,
-            model_name=model_name,
-            provider=provider,
-            elapsed_seconds=elapsed_seconds,
-            provider_errors=provider_errors,
-            validation_error=validation_error,
-            fallback_used=fallback_used,
-            fallback_reason=fallback_reason,
-            pipeline_timings=pipeline_timings,
-            cache_hit=False,
-            cache_similarity=cache_similarity,
-        )
-    except httpx.TimeoutException:
-        timeout_started = time.perf_counter()
-        append_pipeline_timing(pipeline_timings, "exception_timeout", timeout_started)
-        fallback = build_local_fallback_answer(req.user_prompt, allowed_citations)
-        elapsed_seconds = time.perf_counter() - started_at
-        return build_generate_response(
-            text=json.dumps(fallback, ensure_ascii=True),
-            parsed=fallback,
-            model_name="curalink-local-fallback",
-            provider="local",
-            elapsed_seconds=elapsed_seconds,
-            provider_errors=["provider timeout"],
-            validation_error="LLM provider timeout",
-            fallback_used=True,
-            fallback_reason="LLM provider timeout",
-            pipeline_timings=pipeline_timings,
-            cache_hit=False,
-            cache_similarity=cache_similarity,
-        )
+        return {
+            "text": raw_text,
+            "parsed": parsed,
+            "model": model_name,
+            "provider": provider,
+            "elapsed_seconds": elapsed,
+            "semantic_cache_hit": False,
+            "semantic_cache_similarity": None,
+            "pipeline_timings": pipeline_timings,
+        }
+    except httpx.TimeoutException as exc:
+        raise HTTPException(503, "LLM service timeout. The model may still be loading.") from exc
     except ValidationError as exc:
-        validation_started = time.perf_counter()
-        append_pipeline_timing(pipeline_timings, "exception_validation", validation_started)
-        fallback = build_local_fallback_answer(req.user_prompt, allowed_citations)
-        elapsed_seconds = time.perf_counter() - started_at
-        return build_generate_response(
-            text=json.dumps(fallback, ensure_ascii=True),
-            parsed=fallback,
-            model_name="curalink-local-fallback",
-            provider="local",
-            elapsed_seconds=elapsed_seconds,
-            provider_errors=[],
-            validation_error=str(exc),
-            fallback_used=True,
-            fallback_reason=str(exc),
-            pipeline_timings=pipeline_timings,
-            cache_hit=False,
-            cache_similarity=cache_similarity,
-        )
-    except HTTPException as exc:
-        http_started = time.perf_counter()
-        append_pipeline_timing(pipeline_timings, "exception_http", http_started)
-        safe_detail = str(exc.detail) if exc.detail else "Provider unavailable"
-        fallback = build_local_fallback_answer(req.user_prompt, allowed_citations)
-        elapsed_seconds = time.perf_counter() - started_at
-        return build_generate_response(
-            text=json.dumps(fallback, ensure_ascii=True),
-            parsed=fallback,
-            model_name="curalink-local-fallback",
-            provider="local",
-            elapsed_seconds=elapsed_seconds,
-            provider_errors=[safe_detail],
-            validation_error=safe_detail,
-            fallback_used=True,
-            fallback_reason=safe_detail,
-            pipeline_timings=pipeline_timings,
-            cache_hit=False,
-            cache_similarity=cache_similarity,
-        )
+        logger.error("Generation validation error: %s", exc)
+        raise HTTPException(500, f"Generation failed validation: {exc}") from exc
+    except HTTPException:
+        raise
     except Exception as exc:
-        generic_started = time.perf_counter()
-        append_pipeline_timing(pipeline_timings, "exception_generic", generic_started)
-        fallback = build_local_fallback_answer(req.user_prompt, allowed_citations)
-        elapsed_seconds = time.perf_counter() - started_at
-        return build_generate_response(
-            text=json.dumps(fallback, ensure_ascii=True),
-            parsed=fallback,
-            model_name="curalink-local-fallback",
-            provider="local",
-            elapsed_seconds=elapsed_seconds,
-            provider_errors=[str(exc)],
-            validation_error=str(exc),
-            fallback_used=True,
-            fallback_reason=str(exc),
-            pipeline_timings=pipeline_timings,
-            cache_hit=False,
-            cache_similarity=cache_similarity,
-        )
+        logger.error("Generation error: %s", exc)
+        raise HTTPException(500, f"Generation failed: {exc}") from exc
 
 
 async def call_groq(
@@ -1463,24 +1209,6 @@ async def generate_ollama_embeddings(
                 errors.append(f"{model_name}: {exc}")
 
     return None, None, "; ".join(errors[:2]) if errors else "Ollama embedding request failed"
-
-
-async def build_cache_query_embedding(query_text: str) -> List[float]:
-    if not query_text:
-        return []
-
-    if embed_model is not None and np is not None:
-        vector = embed_model.encode([query_text], normalize_embeddings=True)[0]
-        return [float(value) for value in vector.tolist()]
-
-    ollama_embeddings, _, _ = await generate_ollama_embeddings([query_text])
-    if ollama_embeddings and ollama_embeddings[0]:
-        vector = [float(value) for value in ollama_embeddings[0]]
-        norm = math.sqrt(sum(value * value for value in vector))
-        if norm > 0:
-            return [value / norm for value in vector]
-
-    return build_hash_embedding(query_text)
 
 
 @app.post("/embed")
