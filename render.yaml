@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: curalink-llm
+    runtime: python
+    rootDir: llm-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --app-dir . --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: PRIMARY_LLM_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
+      - key: LOCAL_FALLBACK_ENABLED
+        value: "false"
+
+  - type: web
+    name: curalink-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: APP_VERSION
+        value: 1.0.0
+      - key: MONGODB_URI
+        sync: false
+      - key: LLM_SERVICE_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
