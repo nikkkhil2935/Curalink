@@ -91,6 +91,9 @@ OLLAMA_EMBED_FALLBACK_MODEL = os.getenv("OLLAMA_EMBED_FALLBACK_MODEL", "nomic-em
 OLLAMA_EMBED_TIMEOUT_SEC = float(os.getenv("OLLAMA_EMBED_TIMEOUT_SEC", "20"))
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+HF_API_TOKEN = os.getenv("HF_API_TOKEN", "")
+HF_MODEL = os.getenv("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
+HF_INFERENCE_URL = os.getenv("HF_INFERENCE_URL", "https://api-inference.huggingface.co/models").rstrip("/")
 PRIMARY_LLM_PROVIDER = os.getenv("PRIMARY_LLM_PROVIDER", "groq").strip().lower()
 LOCAL_FALLBACK_ENABLED = os.getenv("LOCAL_FALLBACK_ENABLED", "false").lower() != "false"
 FALLBACK_EMBED_DIM = max(32, int(os.getenv("FALLBACK_EMBED_DIM", "384")))
@@ -619,12 +622,89 @@ async def store_fused_cache(cache_key: str, payload: Dict[str, Any]) -> None:
 def get_generation_provider_order() -> List[str]:
     preferred = (
         PRIMARY_LLM_PROVIDER
-        if PRIMARY_LLM_PROVIDER in {"groq", "local_fallback"}
+        if PRIMARY_LLM_PROVIDER in {"groq", "huggingface", "local_fallback"}
         else "groq"
     )
     if preferred == "local_fallback":
-        return ["local_fallback", "groq"]
-    return ["groq", "local_fallback"]
+        return ["local_fallback", "groq", "huggingface"]
+    if preferred == "huggingface":
+        return ["huggingface", "groq", "local_fallback"]
+    return ["groq", "huggingface", "local_fallback"]
+
+
+def build_huggingface_prompt(messages: List[Dict[str, str]]) -> str:
+    rendered: List[str] = []
+
+    for message in messages:
+        role = str(message.get("role") or "user").strip().lower()
+        content = str(message.get("content") or "").strip()
+        if not content:
+            continue
+
+        if role == "system":
+            rendered.append(f"[SYSTEM]\n{content}")
+        elif role == "assistant":
+            rendered.append(f"[ASSISTANT]\n{content}")
+        else:
+            rendered.append(f"[USER]\n{content}")
+
+    rendered.append("[ASSISTANT]\n")
+    return "\n\n".join(rendered)
+
+
+async def call_huggingface(
+    client: httpx.AsyncClient,
+    messages: List[Dict[str, str]],
+    temperature: float,
+    max_tokens: int,
+    model_name: Optional[str] = None,
+) -> str:
+    """Call Hugging Face Inference API for chat-style text generation."""
+    if not HF_API_TOKEN:
+        raise RuntimeError("HF_API_TOKEN is not configured")
+
+    selected_model = str(model_name or HF_MODEL).strip()
+    if not selected_model:
+        raise RuntimeError("HF_MODEL is not configured")
+
+    endpoint = f"{HF_INFERENCE_URL}/{selected_model}"
+    prompt = build_huggingface_prompt(messages)
+    response = await client.post(
+        endpoint,
+        headers={"Authorization": f"Bearer {HF_API_TOKEN}"},
+        json={
+            "inputs": prompt,
+            "parameters": {
+                "max_new_tokens": max(32, min(int(max_tokens), 2048)),
+                "temperature": max(float(temperature), 0.0),
+                "return_full_text": False,
+            },
+            "options": {
+                "wait_for_model": True,
+                "use_cache": True,
+            },
+        },
+    )
+    if response.status_code >= 400:
+        error_body = response.text[:500]
+        raise RuntimeError(f"Hugging Face API {response.status_code}: {error_body}")
+
+    payload = response.json()
+
+    if isinstance(payload, list) and payload and isinstance(payload[0], dict):
+        generated_text = payload[0].get("generated_text") or payload[0].get("text")
+        if isinstance(generated_text, str) and generated_text.strip():
+            return generated_text.strip()
+
+    if isinstance(payload, dict):
+        if payload.get("error"):
+            raise RuntimeError(f"Hugging Face error: {payload.get('error')}")
+
+        generated_text = payload.get("generated_text") or payload.get("text")
+        if isinstance(generated_text, str) and generated_text.strip():
+            return generated_text.strip()
+
+    raise RuntimeError("Unexpected Hugging Face response shape")
 
 
 async def invoke_provider_chain(
@@ -661,6 +741,24 @@ async def invoke_provider_chain(
                     provider_errors.append(f"groq: {groq_exc}")
                 continue
 
+            if candidate == "huggingface":
+                if not HF_API_TOKEN:
+                    provider_errors.append("huggingface: HF_API_TOKEN not configured")
+                    continue
+
+                provider = "huggingface"
+                model_name = HF_MODEL
+                try:
+                    raw_text = await call_huggingface(
+                        client,
+                        messages,
+                        temperature=req.temperature,
+                        max_tokens=req.max_tokens,
+                    )
+                except Exception as hf_exc:
+                    provider_errors.append(f"huggingface: {hf_exc}")
+                continue
+
             if candidate == "local_fallback" and LOCAL_FALLBACK_ENABLED:
                 provider = "local_fallback"
                 model_name = "curalink-local-fallback"
@@ -672,7 +770,7 @@ async def invoke_provider_chain(
         if not raw_text:
             raise HTTPException(
                 status_code=503,
-                detail="No generation provider available. Configure GROQ_API_KEY or enable LOCAL_FALLBACK_ENABLED.",
+                detail="No generation provider available. Configure GROQ_API_KEY or HF_API_TOKEN, or enable LOCAL_FALLBACK_ENABLED.",
             )
 
     return {
@@ -711,7 +809,12 @@ async def provider_generation_node(state: GenerationState) -> GenerationState:
     return {
         "raw_text": str(provider_result.get("raw_text", "")),
         "provider": str(provider_result.get("provider", "groq")),
-        "model": str(provider_result.get("model", GROQ_MODEL if GROQ_API_KEY else "curalink-local-fallback")),
+        "model": str(
+            provider_result.get(
+                "model",
+                GROQ_MODEL if GROQ_API_KEY else (HF_MODEL if HF_API_TOKEN else "curalink-local-fallback"),
+            )
+        ),
         "provider_errors": list(provider_result.get("provider_errors", [])),
         "needs_fallback": False,
     }
@@ -828,7 +931,7 @@ def build_health_payload(llm_status: str) -> Dict[str, Any]:
 
 
 async def detect_llm_status() -> str:
-    if bool(GROQ_API_KEY):
+    if bool(GROQ_API_KEY) or bool(HF_API_TOKEN):
         return "online"
 
     if LOCAL_FALLBACK_ENABLED:
@@ -1095,6 +1198,23 @@ async def call_suggestion_provider(
                     raw_text = ""
                 continue
 
+            if candidate == "huggingface":
+                if not HF_API_TOKEN:
+                    continue
+
+                provider = "huggingface"
+                model_name = HF_MODEL
+                try:
+                    raw_text = await call_huggingface(
+                        client,
+                        messages,
+                        temperature=0.2,
+                        max_tokens=220,
+                    )
+                except Exception:
+                    raw_text = ""
+                continue
+
             if candidate == "local_fallback" and LOCAL_FALLBACK_ENABLED:
                 provider = "local_fallback"
                 model_name = "curalink-local-fallback"
@@ -1113,7 +1233,7 @@ async def call_suggestion_provider(
         if not raw_text:
             raise HTTPException(
                 status_code=503,
-                detail="No suggestion provider available. Configure GROQ_API_KEY or enable LOCAL_FALLBACK_ENABLED.",
+                detail="No suggestion provider available. Configure GROQ_API_KEY or HF_API_TOKEN, or enable LOCAL_FALLBACK_ENABLED.",
             )
 
     return raw_text, provider, model_name
@@ -1257,12 +1377,12 @@ async def get_pdf_stats(session_id: str):
 
 @app.post("/generate/fused")
 async def fused_generate(request: FusedGenerateRequest):
-    if not GROQ_API_KEY:
+    if not GROQ_API_KEY and not HF_API_TOKEN:
         raise HTTPException(
             status_code=503,
             detail={
-                "error": "GROQ_API_KEY is required for fused generation.",
-                "action": "Set GROQ_API_KEY and retry /generate/fused.",
+                "error": "Either GROQ_API_KEY or HF_API_TOKEN is required for fused generation.",
+                "action": "Set GROQ_API_KEY or HF_API_TOKEN and retry /generate/fused.",
             },
         )
 
@@ -1278,20 +1398,36 @@ async def fused_generate(request: FusedGenerateRequest):
         cached_payload["elapsed_seconds"] = round(time.perf_counter() - start_time, 4)
         return cached_payload
 
-    raw_text = await call_groq_direct(
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-        history=[],
-        model=request.model or GROQ_MODEL,
-        temperature=request.temperature,
-        max_tokens=request.max_tokens,
-    )
+    selected_provider = "groq" if GROQ_API_KEY else "huggingface"
+    selected_model = request.model or (GROQ_MODEL if GROQ_API_KEY else HF_MODEL)
+
+    if selected_provider == "groq":
+        raw_text = await call_groq_direct(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            history=[],
+            model=selected_model,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+        )
+    else:
+        async with httpx.AsyncClient(timeout=120) as client:
+            raw_text = await call_huggingface(
+                client,
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                model_name=selected_model,
+            )
 
     allowed_citations = extract_allowed_citations(str(request.research_context or ""))
     if str(request.pdf_context or "").strip() and "DOC" not in allowed_citations:
         allowed_citations.append("DOC")
     parsed_payload = extract_json(raw_text)
-    provider = "groq"
+    provider = selected_provider
     if parsed_payload is None:
         provider = "local_fallback"
         parsed_payload = build_local_fallback_answer(user_prompt, allowed_citations)
@@ -1305,7 +1441,7 @@ async def fused_generate(request: FusedGenerateRequest):
     response_payload = {
         "text": raw_text,
         "parsed": parsed_payload,
-        "model": request.model or GROQ_MODEL,
+        "model": selected_model,
         "provider": provider,
         "elapsed_seconds": round(time.perf_counter() - start_time, 4),
         "semantic_cache_hit": False,
@@ -1389,7 +1525,7 @@ async def generate(req: GenerateRequest):
             parsed = extract_json(raw_text)
             if parsed is not None:
                 parsed = ensure_structured_schema(parsed, allowed_citations)
-            elif provider == "local":
+            elif provider in {"local", "local_fallback"}:
                 parsed = build_local_fallback_answer(req.user_prompt, allowed_citations)
             else:
                 parsed = None
