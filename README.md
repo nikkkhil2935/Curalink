@@ -1,983 +1,1586 @@
 # Curalink
 
-## 1. Project Overview
+<p align="center">
+  <img src="client/public/favicon.svg" alt="Curalink Logo" width="80" />
+</p>
 
-Curalink is an evidence-grounded medical research assistant that combines a React frontend, an Express retrieval API, and a FastAPI LLM service to answer disease-focused questions with explicit source traceability.
+<p align="center">
+  <a href="https://nodejs.org/en/"><img src="https://img.shields.io/badge/Node.js-20-339933?logo=node.js&logoColor=white" alt="Node.js 20" /></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python 3.11" /></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black" alt="React 18" /></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi&logoColor=white" alt="FastAPI" /></a>
+  <a href="https://www.mongodb.com/atlas"><img src="https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb&logoColor=white" alt="MongoDB Atlas" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
+  <a href="https://render.com"><img src="https://img.shields.io/badge/Deploy-Render-46E3B7?logo=render&logoColor=white" alt="Render Deploy" /></a>
+  <a href="https://huggingface.co/spaces"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20HF-Space-FFD21E" alt="HF Space" /></a>
+</p>
 
-### What the project does
+---
 
-Curalink lets a user:
+> **Evidence-grounded medical research assistant** — ask disease-focused questions in natural language and receive structured, citation-linked answers sourced in real time from PubMed, OpenAlex, and ClinicalTrials.gov.
 
-- Create a disease-centered research session with optional intent, demographics, and location context.
-- Ask natural-language medical research questions in a chat workflow.
-- Retrieve large candidate pools from PubMed, OpenAlex, and ClinicalTrials.gov.
-- Normalize and rerank sources using a hybrid relevance/recency/location/credibility scoring pipeline.
-- Generate structured answers with explicit citation IDs (for example, `P1`, `T1`) and confidence breakdown.
-- Inspect evidence via dedicated publications, trials, researchers, and timeline panels.
-- Bookmark assistant answers, search historical answers, export session payloads (PDF/JSON/CSV), and view analytics.
+---
 
-### Why it was built
+## Table of Contents
 
-The project addresses a common gap between:
+1. [Elevator Pitch](#1-elevator-pitch)
+2. [Key Features](#2-key-features)
+3. [Full Tech Stack](#3-full-tech-stack)
+4. [External APIs](#4-external-apis)
+5. [RAG Pipeline — Deep Dive](#5-rag-pipeline--deep-dive)
+6. [LLM Service Architecture](#6-llm-service-architecture)
+7. [Architecture Diagram](#7-architecture-diagram)
+8. [Data Flow Diagram](#8-data-flow-diagram)
+9. [Layer-by-Layer Architecture](#9-layer-by-layer-architecture)
+10. [Annotated Directory & File Map](#10-annotated-directory--file-map)
+11. [graphify-out Folder](#11-graphify-out-folder)
+12. [Complete API Reference](#12-complete-api-reference)
+13. [Database Schema & Models](#13-database-schema--models)
+14. [Key Functions Reference](#14-key-functions-reference)
+15. [Setup & Installation](#15-setup--installation)
+16. [Environment Variables](#16-environment-variables)
+17. [Deployment Guide](#17-deployment-guide)
+18. [Design Decisions & Trade-offs](#18-design-decisions--trade-offs)
+19. [Known Limitations & Caveats](#19-known-limitations--caveats)
+20. [Scripts Reference](#20-scripts-reference)
+21. [Contributing Guidelines](#21-contributing-guidelines)
+22. [License](#22-license)
 
-- Generic LLM chat tools that can answer quickly but are not reliably source-traceable.
-- Raw scientific interfaces (PubMed/OpenAlex/clinical trial registries) that are powerful but difficult for non-research users to navigate quickly.
+---
 
-Curalink was built to prioritize source-linked outputs, retrieval transparency, and session-oriented evidence exploration.
+## 1. Elevator Pitch
 
-### Who it is for
+**Curalink** is a full-stack, evidence-grounded medical research assistant that bridges the gap between opaque LLM chat tools and raw scientific databases. Users ask natural-language questions about a specific disease; Curalink retrieves real-time candidate evidence from PubMed, OpenAlex, and ClinicalTrials.gov, reranks it with a hybrid scoring pipeline, packages the top sources as structured context, and calls a multi-provider LLM to generate a JSON-schema-constrained answer that cites every claim back to a numbered source (`P1`, `T1`, `A1`).
 
-- Patients and caregivers exploring disease-specific research updates.
-- Clinical researchers and students who need fast, broad, multi-source triage.
-- Product/demo environments where explainable AI + source traceability are core requirements.
+**The problem it solves:** Generic AI assistants hallucinate and cannot be audited. Raw literature databases require expert query skills. Curalink occupies the middle ground — fast, broad, multi-source triage with full answer traceability.
 
-## 2. Tech Stack & Why Each Was Chosen
+**Who it is for:**
+- **Patients and caregivers** exploring disease-specific research updates in plain language.
+- **Clinical researchers and students** who need rapid, broad, multi-source evidence triage.
+- **Product and demo environments** where explainable AI and citation traceability are non-negotiable requirements.
 
-### Application stack
+---
 
-| Technology | Where Used | What It Does Here | Why Chosen Over Alternatives |
+## 2. Key Features
+
+- 🧠 **Disease-centered research sessions** with optional intent, demographics, and location context that shape retrieval behavior.
+- 💬 **Natural-language chat** with structured, citation-grounded answers using explicit citation IDs (`P1`, `T1`, `A1`).
+- 🔎 **Parallel multi-source retrieval** from PubMed E-utilities (esearch + XML efetch), OpenAlex Works API, and ClinicalTrials.gov v2 REST API.
+- ⚖️ **Hybrid retrieval scoring** combining keyword relevance, recency decay, location match, credibility weight, and intent-driven boosts.
+- 🤖 **Optional semantic reranking** via sentence-transformers cosine similarity for improved context ordering.
+- 📊 **Confidence breakdown** — evidence strength classified as `LIMITED`, `MODERATE`, or `STRONG` from the retrieved evidence profile.
+- 🗂️ **Evidence panels** — tabbed Publications, Clinical Trials, Researchers, and Timeline views.
+- 🔖 **Bookmarks, history search** (command palette), and **export** (PDF / JSON / CSV) for every session.
+- 📈 **Analytics dashboard** with Recharts visualizations: activity over time, intent distribution, source stats, trial status breakdown.
+- ⚡ **Semantic LRU generation cache** at the LLM service tier to avoid redundant provider calls for similar queries.
+- 🔗 **Multi-provider LLM chain**: Groq → Hugging Face Inference → Ollama → local hash fallback, tried in order.
+- 🔄 **Optional LangGraph workflow mode** — `prepare → generate → parse → fallback` node-based pipeline for transparent generation orchestration.
+- 📅 **Session analytics, cron-driven snapshots**, and per-session drilldowns for operational visibility.
+- 🛠️ **Full monorepo orchestration** with `concurrently` and dynamic port selection via `start.js`.
+
+---
+
+## 3. Full Tech Stack
+
+Every library, tool, and infrastructure component used across all three services is listed here.
+
+### Frontend
+
+| Technology | Version | Role | Why Chosen |
 |---|---|---|---|
-| Node.js 20 | Root tooling + server runtime | Runs orchestration scripts and backend API | Mature ecosystem for API + tooling; easy monorepo scripting |
-| Express 4 | `server/src/app.js`, routes | API routing, middleware, health/status endpoints | Lightweight, fast iteration, clear middleware pipeline |
-| Mongoose 8 | `server/src/models/*.js` | Mongo schema modeling and query API | Schema validation + indexing + familiar ODM for Node |
-| MongoDB Atlas | Session/message/source/analytics persistence | Stores sessions, chat messages, source docs, analytics events | Flexible document model fits mixed payloads (structured answer + trace metadata) |
-| React 18 | `client/src` | UI layer for chat/evidence/analytics | Component ecosystem + routing + state tooling maturity |
-| Vite 6 | Client build/dev server | Fast HMR and production build | Better startup/HMR speed than legacy CRA |
-| Tailwind CSS v4 | `client/src/styles.css`, utility classes | Design-system-like tokenized styling and rapid UI layout | Faster iteration vs hand-authored component CSS across many views |
-| Zustand | `client/src/store/*.js` | Global app and toast state | Smaller API surface than Redux for this scale |
-| Axios | Client and server HTTP calls | Calls backend endpoints and external APIs | Clean interceptors/timeouts and predictable error handling |
-| Recharts | Analytics + timeline views | Charts for activity/intent/source distributions | Easy React integration and composable chart components |
-| FastAPI | `llm-service/main.py` and HF clone | LLM generation/embed/rerank/suggestions service | Async-ready, typed payloads, fast JSON APIs |
-| Pydantic v2 | LLM request/response validation | Enforces schema for generation payloads | Strong runtime validation for structured JSON contracts |
-| sentence-transformers | LLM service embedding path | Query/doc embedding for semantic cache + rerank | Good quality-speed balance for local embedding |
-| Groq API | LLM generation provider option | Hosted model inference in production-like mode | Low-latency hosted inference without self-hosting full model stack |
-| Ollama | Local model provider option | Local chat + local embedding fallback path | Offline/local dev path and controllable local model runtime |
-| LangGraph + LangChain Core | Optional generation workflow mode | Node-based generation flow (`prepare -> generate -> parse -> fallback`) | Explicit staged orchestration and recoverable flow control |
-| node-cron | Backend scheduler | Periodic analytics snapshots | Minimal dependency for cron-like scheduling |
-| Winston | Backend logging | Structured app/service logs to console + files | Better production observability than plain `console` |
-| xml2js | PubMed adapter | Parses XML efetch payloads | Needed for NCBI XML response format |
-| jsPDF | Frontend dependency set | Client-side PDF support (complementary to backend export) | Browser-native export path when needed |
+| React | 18 | UI component framework | Mature ecosystem, hooks API, composable component model |
+| Vite | 6 | Dev server + production bundler | Significantly faster HMR and cold start vs CRA/webpack |
+| Tailwind CSS | v4 | Utility-first styling | Design-token speed and consistent visual system without custom CSS sprawl |
+| Zustand | latest | Global client state | Minimal API surface; no boilerplate compared to Redux at this scale |
+| Axios | latest | HTTP client | Clean interceptors, timeout control, predictable error shapes |
+| Recharts | latest | Data visualization | Composable React-native chart components; easy Tailwind theming |
+| React Router | v6 | Client-side routing | Declarative nested routing for SPA page model |
+| lucide-react | latest | Icon set | Tree-shakeable, consistent stroke-width icon library |
+| jsPDF | latest | Client-side PDF generation | Browser-native export path without server round-trip |
+| shadcn/ui | (components.json) | Component primitives | Accessible, unstyled base layer on Radix UI; Tailwind-compatible |
+| react-rewrite | latest | Visual editing tool | Live WYSIWYG edit → source write-back for React + Vite apps |
 
-### Infrastructure and runtime/tooling
+### Backend
 
-| Tool | Role |
+| Technology | Version | Role | Why Chosen |
+|---|---|---|---|
+| Node.js | 20 | Runtime | LTS with native ESM, stable tooling ecosystem |
+| Express | 4 | HTTP framework | Lightweight, fast iteration, well-understood middleware pipeline |
+| Mongoose | 8 | MongoDB ODM | Schema validation, indexes, hooks, familiar API |
+| MongoDB Atlas | — | Primary database | Flexible document model handles mixed structured/unstructured payloads |
+| Winston | latest | Structured logging | Console + file transports, log levels, production-grade observability |
+| node-cron | latest | Task scheduler | Minimal dependency for periodic analytics snapshot jobs |
+| xml2js | latest | XML parser | Required for NCBI PubMed efetch XML response format |
+| helmet | latest | HTTP security headers | One-line express hardening against common header-based attacks |
+| cors | latest | CORS policy | Configurable origin allowlist for multi-origin local/prod configs |
+| morgan | latest | HTTP request logging | Combined-format access logs routed through Winston |
+| express-rate-limit | latest | Rate limiting | Protect public-facing routes from abuse without external infrastructure |
+| compression | latest | Gzip response compression | Reduces payload size for large source/analytics responses |
+| concurrently | latest | Process orchestration | Runs multiple npm scripts in parallel from a single terminal |
+
+### LLM Service
+
+| Technology | Version | Role | Why Chosen |
+|---|---|---|---|
+| FastAPI | 0.110+ | Async Python API framework | Async-ready, automatic OpenAPI, typed request/response via Pydantic |
+| Pydantic | v2 | Request/response validation | Runtime schema enforcement for generation contracts |
+| sentence-transformers | latest | Local embedding model | Good quality-speed balance for semantic cache and reranking |
+| Groq SDK (`groq`) | latest | Hosted LLM provider | Low-latency inference without self-hosting full model weights |
+| Ollama | — | Local model runtime | Offline/local dev path; controllable local model serving |
+| LangGraph | latest | Generation workflow engine | Explicit node-based pipeline with recoverable fallback stages |
+| LangChain Core | latest | LLM chain primitives | Shared message/prompt/chain abstractions used by LangGraph nodes |
+| uvicorn | latest | ASGI server | Production-ready async server for FastAPI |
+| httpx | latest | Async HTTP client | Native async support for provider chain calls |
+
+### Infrastructure
+
+| Technology | Role | Why Chosen |
+|---|---|---|
+| Docker | Container image for `llm-service` and HF Space | Reproducible Python environment with pinned deps |
+| Render (`render.yaml`) | Multi-service cloud deployment | Simple YAML-driven service definitions; free-tier friendly |
+| Hugging Face Spaces | LLM service hosting alternative | Zero-cost GPU/CPU space, native model support |
+| Vite proxy (`vite.config.js`) | Local `/api` proxy to backend | Same-origin dev API calls without CORS setup |
+| Git LFS (`.gitattributes`) | Large binary/model artifact tracking | Avoids repo bloat for model files in HF Space |
+
+### Dev Tools & Scripts
+
+| Tool/File | Role |
 |---|---|
-| `concurrently` | Root `start.js` process orchestration (client + server + llm-service) |
-| Docker | Container definitions for `llm-service` and `hf-space-curalink-llm` |
-| Render (`render.yaml`) | Multi-service deployment spec (API + LLM) |
-| Vite proxy | Local same-origin dev API proxy to avoid CORS complexity |
+| `start.js` | Multi-service startup with dynamic port allocation and provider env forwarding |
+| `scripts/generate-project-context.mjs` | Snapshots routes/env/tree/dependencies → `PROJECT_CONTEXT.json` + `.md` |
+| `scripts/integration-smoke.mjs` | Full end-to-end integration smoke test runner |
+| `scripts/latency-bench.mjs` | Latency benchmark runner that writes results to `graphify-out/` |
+| `graphify-out/graph.html` | Interactive module dependency graph visualization |
+| `graphify-out/graph.json` | Machine-readable module graph data |
+| `graphify-out/GRAPH_REPORT.md` | Human-readable graph analysis report |
 
-## 3. High-Level Architecture Diagram
+---
+
+## 4. External APIs
+
+Curalink fetches live evidence from three public research APIs and delegates generation to three possible LLM providers. No data is stored from external APIs beyond what is explicitly persisted in MongoDB.
+
+| API | Provider | Used For | Auth Method | Adapter File |
+|---|---|---|---|---|
+| PubMed E-utilities (`esearch` + `efetch` XML) | NCBI / NLM | Biomedical literature retrieval; structured XML article metadata | API key optional; `PUBMED_EMAIL` polite identifier in `tool` param | `server/src/services/apis/pubmed.js` |
+| OpenAlex Works API | OurResearch | Open scholarly works with abstracts and author metadata | No auth required (rate-limited by IP) | `server/src/services/apis/openalex.js` |
+| ClinicalTrials.gov v2 REST API | NIH | Active and completed clinical trials with status/location/contact | No auth required | `server/src/services/apis/clinicaltrials.js` |
+| Groq Hosted LLM Inference | Groq | Fast hosted LLM generation (primary provider) | `GROQ_API_KEY` Bearer token | `llm-service/main.py` |
+| Hugging Face Inference API | Hugging Face | Hosted model inference (secondary provider) | `HF_API_TOKEN` Bearer token | `llm-service/main.py` + `hf-space-curalink-llm/` |
+| Ollama Local Model Runtime | Ollama (self-hosted) | Local LLM generation and embedding (fallback provider) | No auth (localhost) | `llm-service/main.py` |
+
+---
+
+## 5. RAG Pipeline — Deep Dive
+
+The retrieval-augmented generation (RAG) pipeline is the core of Curalink. Every query traverses 13 discrete steps, each implemented in a dedicated module. The pipeline is invoked by `runRetrievalPipeline()` in `server/src/services/pipeline/orchestrator.js`.
+
+### Step 1 — Intent Classification (`intentClassifier.js`)
+
+`classifyIntent(query, sessionIntent)` applies a heuristic keyword-and-pattern map over the user query to assign one of several intent types: `TREATMENT`, `DIAGNOSIS`, `PROGNOSIS`, `PREVENTION`, `MECHANISM`, `CLINICAL_TRIAL`, `GENERAL`. The companion function `getRetrievalStrategy(intent)` returns a strategy object that controls source weights, fetch limits per source, and whether clinical trials are boosted in ranking.
+
+```js
+// server/src/services/pipeline/intentClassifier.js
+const strategy = getRetrievalStrategy(classifyIntent(query, session.intent));
+// strategy = { sources: ['pubmed','openalex','clinicaltrials'], boostTrials: true, ... }
+```
+
+### Step 2 — Query Expansion (`queryExpander.js`)
+
+`expandQuery(query, disease, intent, strategy)` produces source-specific query strings:
+- **PubMed**: adds MeSH-like qualifiers (`[MeSH Terms]`, `[Title/Abstract]`) and disease synonyms.
+- **OpenAlex**: constructs a filter string with concept IDs and title/abstract search.
+- **ClinicalTrials**: builds condition + intervention search terms from the intent type.
+
+This prevents over-generalized queries that return irrelevant results from each API's unique search syntax.
+
+### Step 3 — Parallel Candidate Fetch
+
+Three adapter functions are called concurrently via `Promise.allSettled`:
+
+- `fetchFromPubMed(expandedQuery, limit)` — calls `esearch` to get PMIDs, then `efetch` with XML format, parses with `xml2js`, and extracts title, abstract, authors, year, journal, and PMID.
+- `fetchFromOpenAlex(expandedQuery, limit)` — calls the Works API, reconstructs abstract from inverted-index format, and extracts authors and concept labels.
+- `fetchFromClinicalTrials(expandedQuery, limit)` — calls the v2 `/studies` endpoint, extracts trial status, phase, locations, contacts, and eligibility.
+
+Partial failures from any single source are tolerated; `Promise.allSettled` ensures the pipeline continues with the results that were returned.
+
+### Step 4 — Normalization & Deduplication (`normalizer.js`)
+
+`normalizeAndDeduplicate(pubmedResults, openAlexResults, ctResults)` maps all three candidate arrays into a **unified source shape**:
+
+```js
+{
+  _id,          // external ID (PMID / OpenAlex ID / NCT number)
+  type,         // 'publication' | 'trial'
+  source,       // 'pubmed' | 'openalex' | 'clinicaltrials'
+  title,
+  abstract,
+  authors,
+  year,
+  url,
+  status,       // trial status or null
+  locations,    // trial sites or []
+}
+```
+
+Deduplication uses a `Set` of normalized titles (lowercase, punctuation-stripped) to remove cross-source duplicates before scoring.
+
+### Step 5 — Hybrid Reranking (`reranker.js`)
+
+`rerankCandidates(candidates, query, session, strategy)` scores each candidate on five dimensions:
+
+| Signal | Weight Basis |
+|---|---|
+| Keyword match | TF-style overlap of query tokens in title + abstract |
+| Recency | Exponential decay from current year; newer = higher |
+| Location match | Boost if trial location matches session location |
+| Source credibility | PubMed > OpenAlex > ClinicalTrials baseline weight |
+| Intent boost | Strategy-driven source type multipliers |
+
+`finalScore = keywordScore × keywordWeight + recencyScore × recencyWeight + locationBoost + credibilityBase + intentBoost`
+
+Candidates are sorted descending by `finalScore`.
+
+### Step 6 — Semantic Rerank (`llm.js` → FastAPI `/rerank`)
+
+If the top candidate pool exceeds a skip-threshold (default: high scores already clustered), `semanticRerank(query, candidates, topK)` in `server/src/services/llm.js` calls `POST /rerank` on the FastAPI service. The LLM service encodes the query and all candidate titles+abstracts with sentence-transformers, computes cosine similarity, and returns ranked IDs. The backend then reorders the candidate array by the returned scores.
+
+This step is skipped when the LLM service is unavailable; the hybrid scores serve as the fallback ordering.
+
+### Step 7 — Context Selection + Evidence Strength (`reranker.js`)
+
+`selectForContext(rankedCandidates, maxTokenBudget)` picks the top-N candidates that fit within the prompt token budget, returning a citation-indexed subset.
+
+`computeEvidenceStrength(selectedCandidates)` inspects the profile:
+- `STRONG` — multiple high-scoring publications + active trials.
+- `MODERATE` — mix of sources with moderate scores.
+- `LIMITED` — few sources, low scores, or trials-only.
+
+### Step 8 — RAG Context Build (`contextPackager.js`)
+
+`buildRAGContext(selectedCandidates)` returns:
+```js
+{
+  contextText,   // numbered citation blocks: "[P1] Title. Abstract..."
+  sourceIndex,   // { P1: sourceDocId, T1: sourceDocId, ... }
+}
+```
+
+Each citation block uses a type-prefixed ID (`P` = publication, `T` = trial, `A` = author aggregation) that the LLM is instructed to reference in its answer.
+
+### Step 9 — Prompt Engineering (`contextPackager.js`)
+
+`buildSystemPrompt(evidenceStrength, sourceIndex)` constructs a strict JSON output-contract system prompt. It instructs the model to:
+- Return only a valid JSON object (no markdown wrappers).
+- Include every claim with `[P1]`, `[T1]` citation anchors.
+- Use only the provided source IDs; never invent new citations.
+- Populate `summary`, `keyFindings[]`, `limitations`, `evidenceStrength`, `usedSourceIds[]`.
+
+`buildUserPrompt(query, contextText, session)` injects the user's disease, intent, demographics, location, conversation history, and the citation-indexed context text.
+
+### Step 10 — LLM Generation (FastAPI `/generate`)
+
+The backend calls `callLLM(systemPrompt, userPrompt)` in `server/src/services/llm.js`, which POSTs to `POST /generate` on the FastAPI service.
+
+Inside the LLM service (`llm-service/main.py`):
+1. **Semantic cache lookup** — embeds the prompt and checks `SemanticLRUCache` for a similar previous response above the similarity threshold.
+2. **Provider chain invocation** — `invoke_provider_chain()` tries providers in order: `groq → huggingface → ollama → local_fallback`.
+3. **Schema enforcement** — `ensure_structured_schema()` validates and fills missing fields.
+4. **JSON extraction** — `extract_json()` uses regex + bracket-depth parsing to extract valid JSON from raw model text.
+
+If `USE_LANGGRAPH_WORKFLOW=true`, generation routes through a LangGraph state graph: `prepare_node → generate_node → parse_node → fallback_node`.
+
+### Step 11 — Response Parsing (`llm.js` `parseLLMResponse`)
+
+`parseLLMResponse(rawText, sourceIndex)` in `server/src/services/llm.js`:
+- Extracts JSON from the model's response text with multi-strategy regex + bracket matching.
+- Normalizes the schema: ensures `keyFindings` is an array, `usedSourceIds` references only valid citation IDs.
+- Falls back to a safe synthetic answer with `evidenceStrength: 'LIMITED'` if parsing fails completely.
+
+### Step 12 — Persistence (`orchestrator.js`)
+
+After successful parsing:
+- `SourceDoc.bulkWrite(upsertOps)` — upserts all selected source documents into MongoDB using their external ID as `_id`, incrementing `timesUsed` on each match.
+- `Message.create({ role: 'user', ... })` and `Message.create({ role: 'assistant', structuredAnswer, usedSourceIds, retrievalStats, trace })` — persist both sides of the exchange.
+- `Session.findByIdAndUpdate(id, { $push: { queryHistory: query }, $inc: { messageCount: 2 } })` — updates session metadata.
+
+### Step 13 — Analytics Event (`analyticsService.js`)
+
+`Analytics.create({ event: 'query', disease, intentType, sessionId, metadata: { latency, sourceCount, provider } })` is written asynchronously after the main response is returned to the frontend. This keeps the query latency on the critical path unaffected by analytics writes.
+
+---
+
+## 6. LLM Service Architecture
+
+The FastAPI service (`llm-service/main.py`) is a self-contained Python microservice that handles all model-interaction concerns. It is designed to degrade gracefully when providers are unavailable.
+
+### Endpoints
+
+| Endpoint | Flow |
+|---|---|
+| `POST /generate` | Semantic cache lookup → `invoke_provider_chain` → `ensure_structured_schema` → `extract_json` → cache store |
+| `POST /embed` | sentence-transformers encode → Ollama embed fallback → hash-based synthetic embedding |
+| `POST /rerank` | Encode query + documents → cosine similarity matrix → return ranked IDs + scores |
+| `POST /suggestions` | Build suggestion prompt → provider chain (short max_tokens) → parse suggestion list |
+| `GET /health` | Return provider availability, cache stats, uptime |
+
+### SemanticLRUCache (`cache/semantic_cache.py`)
+
+`SemanticLRUCache(max_size, similarity_threshold)` maintains an ordered dict of `(embedding_vector, response)` pairs. On each lookup:
+1. Embed the incoming prompt.
+2. Compute cosine similarity against all cached embeddings.
+3. Return the cached response if `max_similarity >= threshold`.
+4. Evict the least-recently-used entry when `max_size` is exceeded.
+
+Cache hit rate and size are exposed through `/health`.
+
+### Provider Chain (`invoke_provider_chain`)
+
+```
+groq  →  huggingface  →  ollama  →  local_fallback
+```
+
+Each provider is tried in sequence. A provider is skipped if its credentials are absent or if it raises an exception. `local_fallback` generates a deterministic hash-based synthetic answer and is always available.
+
+### LangGraph Workflow (`USE_LANGGRAPH_WORKFLOW=true`)
+
+When enabled, generation is routed through a four-node LangGraph state graph:
+
+| Node | Responsibility |
+|---|---|
+| `prepare_node` | Validate and format prompt state |
+| `generate_node` | Call `invoke_provider_chain` |
+| `parse_node` | Apply `extract_json` + `ensure_structured_schema` |
+| `fallback_node` | Triggered on parse failure; returns safe synthetic schema |
+
+### Pydantic v2 Schemas
+
+**Request — `/generate`:**
+```python
+class GenerateRequest(BaseModel):
+    system_prompt: str
+    user_prompt: str
+    temperature: float = 0.3
+    max_tokens: int = 2048
+```
+
+**Response — `/generate`:**
+```python
+class GenerateResponse(BaseModel):
+    text: str
+    parsed: dict | None
+    provider: str
+    model: str
+    cached: bool
+    latency_ms: float
+    trace: dict
+```
+
+**Request — `/rerank`:**
+```python
+class RerankRequest(BaseModel):
+    query: str
+    documents: list[str]
+    top_k: int = 10
+```
+
+**Request — `/embed`:**
+```python
+class EmbedRequest(BaseModel):
+    texts: list[str]
+```
+
+---
+
+## 7. Architecture Diagram
+
+The following flowchart shows the complete system topology from user browser to external providers.
 
 ```mermaid
 flowchart LR
-  U[User Browser]
+  U[("User Browser")]
 
-  subgraph FE[Frontend - React/Vite]
-    LP[LandingPage]
-    RI[ResearchInterface]
-    AD[Analytics]
-    ST[Zustand Stores]
+  subgraph FE["Frontend — React 18 / Vite 6"]
+    LP["LandingPage"]
+    RI["ResearchInterface"]
+    AD["Analytics"]
+    ST["Zustand Stores"]
   end
 
-  subgraph API[Backend - Express/Mongoose]
-    RT[Route Layer]
-    ORCH[Retrieval Orchestrator]
-    APIS[Source Adapters]
-    EXP[Export Service]
-    ANA[Analytics Service]
-    CACHE[Query + Insights Caches]
+  subgraph API["Backend — Express 4 / Node.js 20"]
+    RT["Route Layer\n/sessions /query /analytics /export"]
+    ORCH["Pipeline Orchestrator"]
+    APIS["Source Adapters\npubmed · openalex · clinicaltrials"]
+    EXP["Export Service"]
+    ANA["Analytics Service"]
+    CACHE["queryResultCache\ninsightsCache"]
   end
 
-  subgraph DB[MongoDB Atlas]
-    S[(sessions)]
-    M[(messages)]
-    SD[(sourcedocs)]
-    A[(analytics)]
+  subgraph DB["MongoDB Atlas"]
+    S[("sessions")]
+    M[("messages")]
+    SD[("sourcedocs")]
+    A[("analytics")]
   end
 
-  subgraph LLM[FastAPI LLM Service]
-    GEN[/generate]
-    EMB[/embed]
-    RR[/rerank]
-    SUG[/suggestions]
-    SEM[Semantic Cache]
+  subgraph LLM["FastAPI LLM Service\nPython 3.11"]
+    GEN["/generate"]
+    EMB["/embed"]
+    RR["/rerank"]
+    SUG["/suggestions"]
+    SEM["SemanticLRUCache"]
   end
 
-  subgraph EXT[External Research APIs]
-    PM[PubMed E-utilities]
-    OA[OpenAlex Works API]
-    CT[ClinicalTrials.gov v2]
+  subgraph EXT["External Research APIs"]
+    PM["PubMed E-utilities"]
+    OA["OpenAlex Works API"]
+    CT["ClinicalTrials.gov v2"]
+  end
+
+  subgraph PROV["LLM Providers"]
+    GQ["Groq Hosted"]
+    HF["HF Inference"]
+    OL["Ollama (local)"]
+    FB["Hash Fallback"]
   end
 
   U --> FE
-  FE -->|/api/*| API
-  API -->|HTTP| LLM
-  API -->|fetch candidates| EXT
-  API --> DB
-  LLM -->|provider chain| Groq[(Groq)]
-  LLM -->|optional local| Ollama[(Ollama)]
+  FE -->|"/api/*  Axios"| API
+  API -->|"Mongoose"| DB
+  API -->|"HTTP  callLLM"| LLM
+  API -->|"Promise.allSettled"| EXT
+  LLM --> SEM
+  LLM -->|"provider chain"| PROV
 ```
 
-## 4. Layer-by-Layer Breakdown
+---
 
-```mermaid
-flowchart TD
-  L1[UI Layer\nclient/src/components + pages]
-  L2[Frontend State/Integration\nZustand + api client + hooks]
-  L3[API Layer\nExpress routes + middleware]
-  L4[Business Logic Layer\nPipeline + services + adapters]
-  L5[Data Layer\nMongoose models + MongoDB]
-  L6[Model Layer\nFastAPI generation/embed/rerank]
-  L7[External Sources\nPubMed/OpenAlex/ClinicalTrials]
+## 8. Data Flow Diagram
 
-  L1 --> L2 --> L3 --> L4 --> L5
-  L4 --> L6
-  L4 --> L7
-```
-
-### UI layer
-
-- Purpose: user interaction, evidence visualization, analytics presentation.
-- Modules:
-  - Pages: `LandingPage`, `ResearchInterface`, `Analytics`, `AnalyticsDashboard`.
-  - Feature components: chat, evidence tabs, bookmarks, export menu, command palette, status banners.
-- Technologies: React, React Router, Tailwind, Recharts, lucide icons.
-- Connection to next layer: calls API client functions in `client/src/utils/api.js` and updates Zustand stores.
-
-### Frontend state and integration layer
-
-- Purpose: normalize client-side app state and manage API call behavior.
-- Modules:
-  - `client/src/store/useAppStore.js`
-  - `client/src/store/useToastStore.js`
-  - `client/src/utils/api.js`
-  - `client/src/hooks/useTheme.js`
-- Technologies: Zustand, Axios.
-- Connection to next layer: invokes backend routes (`/sessions`, `/analytics/*`, `/health`, `/bookmarks`, etc).
-
-### API layer
-
-- Purpose: request validation, route contracts, middleware policy and health/status exposure.
-- Modules:
-  - `server/src/app.js`
-  - `server/src/routes/query.js`
-  - `server/src/routes/sessions.js`
-  - `server/src/routes/analytics.js`
-  - `server/src/routes/export.js`
-  - middleware: compression, error handler, request/insights cache.
-- Technologies: Express, helmet, cors, morgan, rate-limit.
-- Connection to next layer: invokes orchestrator/services and returns normalized payloads to frontend.
-
-### Business logic layer
-
-- Purpose: retrieval pipeline, scoring, context packaging, LLM calls, exports, analytics rollups.
-- Modules:
-  - Pipeline: `intentClassifier`, `queryExpander`, `normalizer`, `reranker`, `contextPackager`, `orchestrator`.
-  - API adapters: `pubmed`, `openalex`, `clinicaltrials`.
-  - Services: `llm`, `analyticsService`, `export`, `scheduler`, `sessionInsights`, query/insights cache.
-- Technologies: Axios, custom scoring, semantic rerank delegation.
-- Connection to next layer: persists results via Mongoose models and calls FastAPI LLM service.
-
-### Data layer
-
-- Purpose: durable session history, source reuse, and analytics metrics.
-- Modules:
-  - `Session`, `Message`, `SourceDoc`, `Analytics` schemas.
-- Technologies: Mongoose + MongoDB.
-- Connection to next layer: backend reads/writes model documents and aggregates for analytics.
-
-### Model service layer
-
-- Purpose: generation pipeline, robust JSON parsing/normalization, embeddings/reranking, suggestions.
-- Modules:
-  - `llm-service/main.py`
-  - `llm-service/cache/semantic_cache.py`
-- Technologies: FastAPI, Pydantic, sentence-transformers, optional Groq/Ollama + LangGraph.
-- Connection to next layer: calls external model providers and returns structured outputs to backend.
-
-## 5. Data Flow (End-to-End)
+The following sequence diagram traces a single user query from browser to browser.
 
 ```mermaid
 sequenceDiagram
   participant User
   participant FE as React Client
   participant API as Express API
-  participant P as Orchestrator
-  participant Ext as External APIs
-  participant LLM as FastAPI LLM
-  participant DB as MongoDB
+  participant CACHE as Query Cache
+  participant ORCH as Pipeline Orchestrator
+  participant EXT as PubMed / OpenAlex / ClinicalTrials
+  participant LLM as FastAPI LLM Service
+  participant DB as MongoDB Atlas
 
-  User->>FE: Ask question in chat
-  FE->>API: POST /api/sessions/:id/query {message}
-  API->>DB: Load session + recent conversation
-  API->>P: runRetrievalPipeline(session, message, history)
-  P->>P: classifyIntent -> getRetrievalStrategy
-  P->>P: expandQuery
-  P->>Ext: fetchFromPubMed / fetchFromOpenAlex / fetchFromClinicalTrials
-  Ext-->>P: candidate docs
-  P->>P: normalizeAndDeduplicate -> rerankCandidates -> semanticRerank
-  P->>P: selectForContext -> buildRAGContext -> buildSystemPrompt/buildUserPrompt
-  P->>LLM: POST /generate
-  LLM-->>P: parsed structured answer + trace
-  P->>DB: upsert SourceDoc + write Analytics(query)
-  P-->>API: responseText + structuredAnswer + sources + trace
-  API->>DB: create Message(user/assistant) + update Session
-  API-->>FE: message + sources + stats
-  FE-->>User: structured answer + evidence tabs + confidence bars
+  User->>FE: Type question + submit
+  FE->>API: POST /api/sessions/:id/query { message }
+  API->>CACHE: getCachedQueryResult(sessionId, message)
+  alt Cache hit
+    CACHE-->>API: cached response
+    API-->>FE: cached message + sources
+  else Cache miss
+    API->>DB: Session.findById + Message.find (recent history)
+    DB-->>API: session + history[]
+    API->>ORCH: runRetrievalPipeline(session, message, history)
+    ORCH->>ORCH: classifyIntent → getRetrievalStrategy
+    ORCH->>ORCH: expandQuery (PubMed / OpenAlex / CT variants)
+    par Parallel fetch
+      ORCH->>EXT: fetchFromPubMed(expandedQuery)
+      ORCH->>EXT: fetchFromOpenAlex(expandedQuery)
+      ORCH->>EXT: fetchFromClinicalTrials(expandedQuery)
+    end
+    EXT-->>ORCH: candidate arrays (partial failures tolerated)
+    ORCH->>ORCH: normalizeAndDeduplicate
+    ORCH->>ORCH: rerankCandidates (hybrid scoring)
+    ORCH->>LLM: POST /rerank { query, documents }
+    LLM-->>ORCH: ranked IDs + cosine scores
+    ORCH->>ORCH: selectForContext + computeEvidenceStrength
+    ORCH->>ORCH: buildRAGContext → buildSystemPrompt / buildUserPrompt
+    ORCH->>LLM: POST /generate { system_prompt, user_prompt }
+    LLM->>LLM: semantic cache lookup
+    LLM->>LLM: invoke_provider_chain (Groq → HF → Ollama → fallback)
+    LLM->>LLM: ensure_structured_schema + extract_json
+    LLM-->>ORCH: { text, parsed, provider, model, cached, latency_ms }
+    ORCH->>ORCH: parseLLMResponse (JSON extract + citation safety)
+    ORCH->>DB: SourceDoc.bulkWrite (upsert selected sources)
+    ORCH->>DB: Analytics.create (query event)
+    ORCH-->>API: { responseText, structuredAnswer, sources, trace, evidenceStrength }
+    API->>DB: Message.create (user) + Message.create (assistant)
+    API->>DB: Session.findByIdAndUpdate (queryHistory, messageCount)
+    API->>CACHE: setCachedQueryResult(sessionId, message, response)
+    API-->>FE: { message, sources, stats, evidenceStrength, sourceIndex, trace }
+  end
+  FE-->>User: Structured answer + evidence tabs + confidence bars
 ```
 
-### Concrete backend function path for a query
+---
 
-1. `client/src/components/chat/ChatPanel.jsx` -> `handleSend()`.
-2. `client/src/utils/api.js` -> `api.post(/sessions/:id/query)`.
-3. `server/src/routes/query.js` -> `POST /sessions/:id/query`.
-4. `server/src/services/pipeline/orchestrator.js` -> `runRetrievalPipeline()`.
-5. Pipeline internals:
-   - `classifyIntent()` and `getRetrievalStrategy()`.
-   - `expandQuery()`.
-   - `fetchFromPubMed()`, `fetchFromOpenAlex()`, `fetchFromClinicalTrials()`.
-   - `normalizeAndDeduplicate()`.
-   - `rerankCandidates()`, `semanticRerank()`.
-   - `selectForContext()`, `computeEvidenceStrength()`.
-   - `buildRAGContext()`, `buildSystemPrompt()`, `buildUserPrompt()`.
-   - `callLLM()` and `parseLLMResponse()`.
-6. Persistence and response:
-   - `SourceDoc.bulkWrite(...)` in orchestrator.
-   - `Message.create(...)` + `Session.findByIdAndUpdate(...)` in route.
-   - returns assistant message payload + source panel payload + trace metrics.
+## 9. Layer-by-Layer Architecture
 
-## 6. Directory Structure
+Curalink is organized into seven distinct architectural layers. Each layer has a single, well-defined responsibility and communicates with adjacent layers through typed contracts.
 
-> Annotated source/config tree (codebase-focused). Runtime-generated caches and large machine outputs are grouped with wildcards where repetitive.
+### Layer 1 — UI
+
+| Attribute | Detail |
+|---|---|
+| **Purpose** | User interaction, evidence visualization, analytics presentation |
+| **Key modules** | `LandingPage`, `ResearchInterface`, `Analytics`, `ChatPanel`, `EvidencePanel`, `BookmarksPanel`, `HistoryCommandPalette` |
+| **Technologies** | React 18, React Router v6, Tailwind CSS v4, Recharts, lucide-react |
+| **Connection to Layer 2** | Reads/writes Zustand stores; calls functions exported from `client/src/utils/api.js` |
+
+### Layer 2 — Frontend State & Integration
+
+| Attribute | Detail |
+|---|---|
+| **Purpose** | Normalize client-side app state; manage API call behavior and error handling |
+| **Key modules** | `useAppStore.js`, `useToastStore.js`, `api.js`, `useTheme.js` |
+| **Technologies** | Zustand, Axios |
+| **Connection to Layer 3** | Calls backend REST endpoints; maps responses into store slices consumed by UI components |
+
+### Layer 3 — API
+
+| Attribute | Detail |
+|---|---|
+| **Purpose** | Request validation, route contracts, middleware policy, health/status exposure |
+| **Key modules** | `app.js`, `routes/query.js`, `routes/sessions.js`, `routes/analytics.js`, `routes/export.js` |
+| **Technologies** | Express 4, helmet, cors, morgan, express-rate-limit, compression |
+| **Connection to Layer 4** | Invokes pipeline orchestrator and service functions; returns normalized JSON to Layer 2 |
+
+### Layer 4 — Business Logic
+
+| Attribute | Detail |
+|---|---|
+| **Purpose** | Retrieval pipeline, hybrid scoring, context packaging, LLM calls, exports, analytics rollups |
+| **Key modules** | `orchestrator.js`, `intentClassifier.js`, `queryExpander.js`, `normalizer.js`, `reranker.js`, `contextPackager.js`, `pubmed.js`, `openalex.js`, `clinicaltrials.js`, `llm.js`, `analyticsService.js`, `export.js` |
+| **Technologies** | Axios, custom scoring algorithms, semantic rerank delegation |
+| **Connection to Layers 5 & 6** | Persists results via Mongoose; calls FastAPI LLM service over HTTP |
+
+### Layer 5 — Data
+
+| Attribute | Detail |
+|---|---|
+| **Purpose** | Durable session history, source reuse tracking, analytics event storage |
+| **Key modules** | `Session.js`, `Message.js`, `SourceDoc.js`, `Analytics.js` |
+| **Technologies** | Mongoose 8, MongoDB Atlas |
+| **Connection to Layer 4** | Provides model classes and query API consumed by business logic services |
+
+### Layer 6 — Model Service
+
+| Attribute | Detail |
+|---|---|
+| **Purpose** | Generation, embedding, reranking, suggestions; provider chain fallback; semantic cache |
+| **Key modules** | `llm-service/main.py`, `llm-service/cache/semantic_cache.py` |
+| **Technologies** | FastAPI, Pydantic v2, sentence-transformers, Groq SDK, httpx, LangGraph, LangChain Core |
+| **Connection to Layer 7** | Calls external LLM provider APIs; returns structured responses to Layer 4 |
+
+### Layer 7 — External Sources
+
+| Attribute | Detail |
+|---|---|
+| **Purpose** | Live retrieval of biomedical literature, trial registrations, and scholarly works |
+| **Key modules** | PubMed E-utilities, OpenAlex Works API, ClinicalTrials.gov v2, Groq API, HF Inference API, Ollama |
+| **Technologies** | REST/XML APIs (public), hosted model APIs |
+| **Connection to Layer 4** | Returns raw candidate arrays consumed by the normalization step |
+
+---
+
+## 10. Annotated Directory & File Map
+
+Every source file is listed with its role. Runtime-generated artifacts are grouped with wildcards.
 
 ```text
 Curalink/
-|-- .env.example                         # Root-level sample env values for local defaults.
-|-- .gitignore                           # Ignore rules for Node, Python, logs, and generated artifacts.
-|-- components.json                      # shadcn/ui component generator configuration.
-|-- DAY1_IMPLEMENTATION.md               # Legacy implementation planning doc (historical).
-|-- DAY2_IMPLEMENTATION.md               # Legacy implementation planning doc (historical).
-|-- DAY3_IMPLEMENTATION.md               # Legacy implementation planning doc (historical).
-|-- DAY4_IMPLEMENTATION.md               # Legacy implementation planning doc (historical).
-|-- integration-smoke.mjs                # Root proxy that executes scripts/integration-smoke.mjs.
-|-- main.py                              # Root ASGI compatibility entrypoint forwarding to llm-service/main.py.
-|-- package.json                         # Root scripts orchestrating checks/startup across services.
-|-- package-lock.json                    # Root lockfile.
-|-- PRD (1).md                           # Product requirements and architecture intent doc.
-|-- PROJECT_CONTEXT.json                 # Generated machine-readable project context snapshot.
-|-- PROJECT_CONTEXT.md                   # Generated human-readable project context snapshot.
-|-- README.md                            # This documentation.
-|-- render.yaml                          # Render deployment spec for API and LLM services.
-|-- start.js                             # Multi-service startup orchestrator with dynamic port selection.
-|-- TODO.md                              # Legacy audit TODO notes.
-|
-|-- .github/
-|  `-- agents/
-|     |-- prd-backend-pipeline.agent.md      # Backend implementation agent instructions.
-|     |-- prd-frontend-experience.agent.md   # Frontend implementation agent instructions.
-|     |-- prd-llm-rag.agent.md               # LLM/RAG implementation agent instructions.
-|     |-- prd-sync-orchestrator.agent.md     # Cross-layer orchestration guidance.
-|     `-- prd-validation-sync.agent.md       # Validation and synchronization guidance.
-|
-|-- .superdesign/
-|  |-- SUPERDESIGN.md                    # Superdesign workflow operating guide.
-|  |-- design-system.md                  # Design-system synthesis for UI generation workflows.
-|  `-- init/
-|     |-- components.md                  # Precomputed component inventory.
-|     |-- extractable-components.md      # Candidate reusable extracted components.
-|     |-- layouts.md                     # Layout-level source analysis snapshot.
-|     |-- pages.md                       # Page dependency map snapshot.
-|     |-- routes.md                      # Route inventory snapshot.
-|     `-- theme.md                       # Theme/token summary snapshot.
-|
-|-- client/
-|  |-- .env.example                      # Frontend local env defaults.
-|  |-- .env.production                   # Frontend production API endpoint defaults.
-|  |-- index.html                        # Vite entry HTML.
-|  |-- package.json                      # Frontend scripts and dependencies.
-|  |-- package-lock.json                 # Frontend lockfile.
-|  |-- tailwind.config.js                # Tailwind content paths/config.
-|  |-- vite.config.js                    # Vite plugins, aliases, and /api proxy.
-|  |-- public/
-|  |  |-- favicon.ico                    # Browser favicon.
-|  |  `-- favicon.svg                    # SVG app icon.
-|  `-- src/
-|     |-- App.jsx                        # Route registration and suspense shell.
-|     |-- main.jsx                       # React app bootstrap and BrowserRouter mount.
-|     |-- styles.css                     # Global design tokens and utility surface classes.
-|     |-- components/
-|     |  |-- ContextForm.jsx                     # Session context creation form component.
-|     |  |-- analytics/
-|     |  |  |-- AnalyticsBadge.jsx               # Analytics status/label badge UI.
-|     |  |  |-- AnalyticsCard.jsx                # Generic analytics card container.
-|     |  |  |-- AnalyticsChartsTabs.jsx          # Tabbed analytics chart section.
-|     |  |  |-- AnalyticsLoadingSkeleton.jsx     # Loading skeleton variant for analytics.
-|     |  |  |-- AnalyticsMetricCard.jsx          # Metric tile with accent styling.
-|     |  |  |-- AnalyticsSkeleton.jsx            # Composite analytics loading state.
-|     |  |  |-- AnalyticsStateNotice.jsx         # Empty/error state notice block.
-|     |  |  |-- AnalyticsTabs.jsx                # Analytics view tab control.
-|     |  |  |-- OverviewCharts.jsx               # Overview chart composition helper.
-|     |  |  |-- OverviewMetrics.jsx              # Overview metrics composition helper.
-|     |  |  |-- SessionBreakdownPanel.jsx        # Session-level analytics drilldown panel.
-|     |  |  `-- SystemStatusWidget.jsx           # Health/status widget with polling.
-|     |  |-- chat/
-|     |  |  |-- ChatInput.jsx                    # Input box with suggestions/autoresize.
-|     |  |  |-- ChatPanel.jsx                    # Chat orchestration and send flow.
-|     |  |  |-- MessageBubble.jsx                # Per-message rendering + bookmark/citation helpers.
-|     |  |  `-- StructuredAnswer.jsx             # Structured answer block renderer.
-|     |  |-- evidence/
-|     |  |  |-- EvidencePanel.jsx                # Tabbed evidence container.
-|     |  |  |-- PublicationsTab.jsx              # Publication cards, search, and pagination.
-|     |  |  |-- ResearchersTab.jsx               # Author aggregation and spotlight list.
-|     |  |  |-- TimelineTab.jsx                  # Conversation timeline panel.
-|     |  |  `-- TrialsTab.jsx                    # Clinical trial cards and metadata.
-|     |  |-- features/
-|     |  |  |-- BookmarksPanel.jsx               # Global bookmark list grouped by session.
-|     |  |  |-- BookmarkToggle.jsx               # Toggle bookmark API action.
-|     |  |  |-- EvidenceConfidenceBars.jsx       # Confidence metric bar visualization.
-|     |  |  |-- EvidenceConfidenceHeatmap.jsx    # Confidence table/heatmap for sources.
-|     |  |  |-- HistoryCommandPalette.jsx        # Keyboard-driven history search modal.
-|     |  |  |-- SessionExportMenu.jsx            # Export trigger and progress UX.
-|     |  |  `-- SystemStatusBanner.jsx           # Global API/DB/LLM status banner.
-|     |  |-- layout/
-|     |  |  `-- AppTopNav.jsx                    # Top navigation/header wrapper.
-|     |  |-- sidebar/
-|     |  |  |-- ExportButton.jsx                 # Sidebar export action button.
-|     |  |  `-- Sidebar.jsx                      # Session metadata/retrieval/sidebar controls.
-|     |  `-- ui/
-|     |     |-- Button.jsx                       # Variant button primitive.
-|     |     |-- Card.jsx                         # Variant card primitive.
-|     |     |-- ErrorBanner.jsx                  # Error toast/banner primitive.
-|     |     |-- LoadingOverlay.jsx               # Overlay loading scaffold.
-|     |     |-- ThemeToggle.jsx                  # Theme mode switch UI.
-|     |     |-- ToastViewport.jsx                # App-wide toast stack renderer.
-|     |     `-- textarea.jsx                     # Styled textarea primitive.
-|     |-- hooks/
-|     |  `-- useTheme.js                         # Theme mode hook + persistence.
-|     |-- lib/
-|     |  `-- utils.js                            # `cn`, `clamp`, keyboard helpers.
-|     |-- pages/
-|     |  |-- Analytics.jsx                       # Current analytics dashboard route.
-|     |  |-- AnalyticsDashboard.jsx              # Legacy/alternate analytics dashboard route.
-|     |  |-- LandingPage.jsx                     # Session creation and launch page.
-|     |  `-- ResearchInterface.jsx               # Main research workspace route.
-|     |-- store/
-|     |  |-- useAppStore.js                      # Main app/session/message/source store.
-|     |  `-- useToastStore.js                    # Toast state store and helper actions.
-|     `-- utils/
-|        `-- api.js                              # Axios API client with fallback and health cache.
-|
-|-- server/
-|  |-- .env                                # Local development env (contains secrets; do not commit).
-|  |-- .env.example                        # Backend env template with required settings.
-|  |-- .node-version                       # Node runtime version pin for backend.
-|  |-- package.json                        # Backend scripts/dependencies.
-|  |-- package-lock.json                   # Backend lockfile.
-|  |-- logs/
-|  |  |-- combined.log                     # Aggregated backend logs (runtime artifact).
-|  |  `-- error.log                        # Error backend logs (runtime artifact).
-|  `-- src/
-|     |-- app.js                           # Express boot, health endpoints, Mongo connect, scheduler start.
-|     |-- lib/
-|     |  `-- logger.js                     # Winston logger configuration.
-|     |-- middleware/
-|     |  |-- errorHandler.js               # Error mapping middleware.
-|     |  |-- gzipCompression.js            # Custom JSON gzip middleware.
-|     |  |-- insightsCache.js              # Request-level insights response cache middleware.
-|     |  `-- requestLogger.js              # Request timing logger middleware.
-|     |-- models/
-|     |  |-- Analytics.js                  # Analytics event schema.
-|     |  |-- Message.js                    # Message and structured answer schema.
-|     |  |-- Session.js                    # Session metadata schema.
-|     |  `-- SourceDoc.js                  # Normalized source document schema.
-|     |-- routes/
-|     |  |-- analytics.js                  # Analytics endpoints.
-|     |  |-- export.js                     # Session export endpoint.
-|     |  |-- query.js                      # Query + suggestion endpoints.
-|     |  `-- sessions.js                   # Session CRUD, bookmarks, insights, source retrieval.
-|     `-- services/
-|        |-- analyticsService.js           # Aggregated analytics computations.
-|        |-- export.js                     # JSON/CSV/PDF export construction.
-|        |-- healthContract.js             # Health response normalization patch.
-|        |-- insightsCache.js              # LRU-like insights cache helpers.
-|        |-- llm.js                        # Backend client for FastAPI LLM calls.
-|        |-- queryResultCache.js           # Per-session query response cache.
-|        |-- scheduler.js                  # Cron snapshot scheduler.
-|        |-- sessionInsights.js            # Insights payload/latency/source utility functions.
-|        |-- apis/
-|        |  |-- clinicaltrials.js          # ClinicalTrials.gov adapter.
-|        |  |-- openalex.js                # OpenAlex adapter.
-|        |  `-- pubmed.js                  # PubMed adapter.
-|        `-- pipeline/
-|           |-- contextPackager.js         # Prompt context and system/user prompt builders.
-|           |-- intentClassifier.js        # Intent heuristics and retrieval strategy map.
-|           |-- normalizer.js              # Candidate normalization and deduplication.
-|           |-- orchestrator.js            # End-to-end retrieval + LLM orchestration.
-|           |-- queryExpander.js           # Disease/intent query expansion logic.
-|           |-- reranker.js                # Candidate scoring and context selection.
-|           `-- retriever.js               # Placeholder retriever (currently unused by orchestrator).
-|
-|-- llm-service/
-|  |-- .python-version                     # Python version pin.
-|  |-- Dockerfile                          # LLM service container image build.
-|  |-- main.py                             # FastAPI app for health/generate/embed/rerank/suggestions.
-|  |-- requirements.txt                    # Python dependency lock/pin list.
-|  |-- start.sh                            # Runtime start script (provider detection + uvicorn).
-|  `-- cache/
-|     |-- __init__.py                      # Cache module exports.
-|     `-- semantic_cache.py                # Semantic LRU cache implementation.
-|
-|-- hf-space-curalink-llm/
-|  |-- .gitattributes                      # Git LFS patterns for model/binary artifacts.
-|  |-- Dockerfile                          # Hugging Face Space container spec.
-|  |-- main.py                             # HF-space LLM service entry (mirrors llm-service).
-|  |-- README.md                           # HF Space metadata card.
-|  |-- requirements.txt                    # HF Space Python dependencies.
-|  `-- start.sh                            # HF Space startup script.
-|
-|-- scripts/
-|  |-- generate-project-context.mjs        # Context generator (routes/env/tree/dependency snapshot).
-|  |-- integration-smoke.mjs               # Full integration smoke test runner (spawns services).
-|  `-- latency-bench.mjs                   # Latency benchmark runner + report writer.
-|
-|-- logs/                                  # Root log output directory (runtime artifact).
-|
-`-- graphify-out/
-   |-- GRAPH_REPORT.md                     # Graphify report output.
-   |-- graph.html                          # Graph visualization artifact.
-   |-- graph.json                          # Graph data artifact.
-   |-- manifest.json                       # Graphify run manifest.
-   |-- cost.json                           # Graphify token/cost metrics artifact.
-   |-- memory-map-*.json                   # Graphify memory map snapshots.
-   |-- latency-bench-*.json                # Latency benchmark snapshots.
-   |-- .graphify_chunk_*.json              # Chunked graph intermediate files.
-   |-- cache/*.json                        # Graphify cache objects (large generated set).
-   `-- memory/*.md                         # Graphify memory notes.
+├── .env.example                         # Root-level env template for local defaults
+├── .gitignore                           # Ignores: node_modules, __pycache__, logs, graphify-out artifacts
+├── .gitattributes                       # Git LFS patterns for model/binary artifacts in HF Space
+├── components.json                      # shadcn/ui component generator config (style, aliases, rsc)
+├── integration-smoke.mjs                # Root proxy that delegates to scripts/integration-smoke.mjs
+├── jsconfig.json                        # IDE/tooling path aliases for workspace
+├── main.py                              # Root ASGI compatibility shim forwarding to llm-service/main.py
+├── package.json                         # Root monorepo scripts: start:all, doctor, check:*, rewrite
+├── package-lock.json                    # Root lockfile
+├── render.yaml                          # Render deployment spec: curalink-api + curalink-llm services
+├── start.js                             # Multi-service orchestrator with dynamic port allocation
+├── PROJECT_CONTEXT.json                 # Generated machine-readable project context snapshot
+├── PROJECT_CONTEXT.md                   # Generated human-readable project context snapshot
+├── README.md                            # This file
+│
+├── .github/
+│   └── agents/
+│       ├── prd-backend-pipeline.agent.md    # Agent instructions for backend pipeline implementation
+│       ├── prd-frontend-experience.agent.md # Agent instructions for frontend feature implementation
+│       ├── prd-llm-rag.agent.md             # Agent instructions for LLM/RAG layer implementation
+│       ├── prd-sync-orchestrator.agent.md   # Cross-layer orchestration and sync guidance
+│       └── prd-validation-sync.agent.md     # Validation and cross-service sync instructions
+│
+├── client/
+│   ├── .env.example                     # Frontend env template (VITE_APP_NAME, VITE_API_URL)
+│   ├── .env.production                  # Frontend production API endpoint override
+│   ├── index.html                       # Vite HTML entry point; mounts #root
+│   ├── package.json                     # Frontend deps: react, vite, tailwind, zustand, recharts, etc.
+│   ├── package-lock.json                # Frontend lockfile
+│   ├── tailwind.config.js               # Tailwind content paths and theme extensions
+│   ├── vite.config.js                   # Vite plugins, path aliases (@/), /api proxy to backend
+│   ├── public/
+│   │   ├── favicon.ico                  # Browser tab favicon
+│   │   └── favicon.svg                  # SVG app icon (used in navbar)
+│   └── src/
+│       ├── App.jsx                      # Route registration with React Router; suspense boundaries
+│       ├── main.jsx                     # React app bootstrap; BrowserRouter + StrictMode mount
+│       ├── styles.css                   # Global Tailwind base + design token surface classes
+│       ├── components/
+│       │   ├── ContextForm.jsx                  # Session creation context form (disease/intent/location/demographics)
+│       │   ├── analytics/
+│       │   │   ├── AnalyticsBadge.jsx           # Status/label badge for analytics events
+│       │   │   ├── AnalyticsCard.jsx            # Generic card container for analytics sections
+│       │   │   ├── AnalyticsChartsTabs.jsx      # Tabbed section hosting all Recharts visualizations
+│       │   │   ├── AnalyticsLoadingSkeleton.jsx # Skeleton loader variant for analytics data
+│       │   │   ├── AnalyticsMetricCard.jsx      # Single metric tile with accent color and delta
+│       │   │   ├── AnalyticsSkeleton.jsx        # Composite analytics page loading state
+│       │   │   ├── AnalyticsStateNotice.jsx     # Empty state / error notice block for analytics
+│       │   │   ├── AnalyticsTabs.jsx            # Tab switcher between Overview and Session views
+│       │   │   ├── OverviewCharts.jsx           # Composition of activity/intent/source charts
+│       │   │   ├── OverviewMetrics.jsx          # Summary metrics composition (queries, sessions, etc.)
+│       │   │   ├── SessionBreakdownPanel.jsx    # Per-session analytics drilldown panel
+│       │   │   └── SystemStatusWidget.jsx       # Health polling widget (DB / LLM / API status)
+│       │   ├── chat/
+│       │   │   ├── ChatInput.jsx                # Auto-resizing textarea with suggestion chips
+│       │   │   ├── ChatPanel.jsx                # Chat orchestration: send, scroll, loading states
+│       │   │   ├── MessageBubble.jsx            # Per-message renderer with citation + bookmark actions
+│       │   │   └── StructuredAnswer.jsx         # Structured answer block with findings + evidence strength
+│       │   ├── evidence/
+│       │   │   ├── EvidencePanel.jsx            # Tabbed container: Publications / Trials / Researchers / Timeline
+│       │   │   ├── PublicationsTab.jsx          # Publication cards with abstract, authors, search + pagination
+│       │   │   ├── ResearchersTab.jsx           # Author aggregation and researcher spotlight list
+│       │   │   ├── TimelineTab.jsx              # Conversation-level evidence timeline
+│       │   │   └── TrialsTab.jsx                # Clinical trial cards with status/phase/location metadata
+│       │   ├── features/
+│       │   │   ├── BookmarksPanel.jsx           # Bookmarked message list grouped by session
+│       │   │   ├── BookmarkToggle.jsx           # API-wired toggle for bookmarking an assistant message
+│       │   │   ├── EvidenceConfidenceBars.jsx   # Horizontal bar chart for evidence confidence scores
+│       │   │   ├── EvidenceConfidenceHeatmap.jsx # Source-level confidence table/heatmap
+│       │   │   ├── HistoryCommandPalette.jsx    # Keyboard-driven modal for searching message history
+│       │   │   ├── SessionExportMenu.jsx        # Export trigger: PDF / JSON / CSV download UX
+│       │   │   └── SystemStatusBanner.jsx       # Global API / DB / LLM availability status banner
+│       │   ├── layout/
+│       │   │   └── AppTopNav.jsx                # Top navigation bar with theme toggle and nav links
+│       │   ├── sidebar/
+│       │   │   ├── ExportButton.jsx             # Sidebar-mounted export shortcut button
+│       │   │   └── Sidebar.jsx                  # Session metadata display + retrieval stats + controls
+│       │   └── ui/
+│       │       ├── Button.jsx                   # Variant button primitive (primary/secondary/ghost)
+│       │       ├── Card.jsx                     # Variant card primitive with header/body/footer slots
+│       │       ├── ErrorBanner.jsx              # Dismissable error banner for API/network failures
+│       │       ├── LoadingOverlay.jsx           # Full-screen loading scaffold with spinner
+│       │       ├── ThemeToggle.jsx              # Light/dark mode toggle using useTheme hook
+│       │       ├── ToastViewport.jsx            # App-wide Radix toast stack renderer
+│       │       └── textarea.jsx                 # Styled textarea primitive with auto-resize support
+│       ├── hooks/
+│       │   └── useTheme.js                      # Light/dark theme mode with localStorage persistence
+│       ├── lib/
+│       │   └── utils.js                         # `cn` (clsx+twMerge), `clamp`, keyboard event helpers
+│       ├── pages/
+│       │   ├── Analytics.jsx                    # Current analytics dashboard route component
+│       │   ├── AnalyticsDashboard.jsx           # Legacy / alternate analytics dashboard (retained)
+│       │   ├── LandingPage.jsx                  # Session creation, suggestion chips, start flow
+│       │   └── ResearchInterface.jsx            # Main 3-panel research workspace + bootstrap logic
+│       ├── store/
+│       │   ├── useAppStore.js                   # Central Zustand store: session, messages, sources, tab, errors
+│       │   └── useToastStore.js                 # Toast state + push/dismiss action creators
+│       └── utils/
+│           └── api.js                           # Axios instance, all API call functions, health cache
+│
+├── server/
+│   ├── .env                                 # Local dev env (⚠️ contains live secrets — do not commit)
+│   ├── .env.example                         # Backend env template with all required variables
+│   ├── .node-version                        # Node runtime version pin (20.x)
+│   ├── package.json                         # Backend deps: express, mongoose, winston, etc.
+│   ├── package-lock.json                    # Backend lockfile
+│   ├── logs/
+│   │   ├── combined.log                     # Aggregated runtime logs (artifact — gitignored)
+│   │   └── error.log                        # Error-level runtime logs (artifact — gitignored)
+│   └── src/
+│       ├── app.js                           # Express boot, /health endpoint, Mongo connect, scheduler
+│       ├── lib/
+│       │   ├── llmServiceAuth.js            # Optional bearer token header builder for LLM calls
+│       │   └── logger.js                    # Winston logger: console + file transports, log levels
+│       ├── middleware/
+│       │   ├── errorHandler.js              # Maps thrown errors to HTTP status codes + JSON response
+│       │   ├── gzipCompression.js           # Custom JSON gzip middleware wrapping `compression`
+│       │   ├── insightsCache.js             # Request-level insights response cache middleware
+│       │   └── requestLogger.js             # Per-request timing logger (ms) via Winston
+│       ├── models/
+│       │   ├── Analytics.js                 # Analytics event schema + indexes
+│       │   ├── Message.js                   # Message + structuredAnswer schema + indexes
+│       │   ├── Session.js                   # Session metadata schema + indexes
+│       │   └── SourceDoc.js                 # Normalized source document schema + indexes
+│       ├── routes/
+│       │   ├── analytics.js                 # GET analytics/overview, breakdown, top-diseases, etc.
+│       │   ├── export.js                    # GET sessions/:id/export (PDF/JSON/CSV)
+│       │   ├── query.js                     # POST sessions/:id/query, GET suggestions
+│       │   └── sessions.js                  # Session CRUD, bookmarks, insights, sources, history search
+│       └── services/
+│           ├── analyticsService.js          # Aggregation-based analytics payload builders
+│           ├── briefGenerator.js            # Session brief synthesis from persisted conversation+evidence
+│           ├── export.js                    # JSON/CSV/PDF export construction (jsPDF backend path)
+│           ├── healthContract.js            # Health response normalization and status patching
+│           ├── insightsCache.js             # LRU-like insights cache read/write helpers
+│           ├── llm.js                       # HTTP client bridge to FastAPI: callLLM, parseLLMResponse, semanticRerank
+│           ├── queryResultCache.js          # Per-session query response cache with TTL + LRU eviction
+│           ├── scheduler.js                 # node-cron periodic analytics snapshot writer
+│           ├── sessionInsights.js           # Insight payload builders, latency stats, source utilities
+│           ├── apis/
+│           │   ├── clinicaltrials.js        # ClinicalTrials.gov v2 REST adapter
+│           │   ├── openalex.js              # OpenAlex Works API adapter
+│           │   └── pubmed.js               # PubMed esearch + efetch XML adapter
+│           └── pipeline/
+│               ├── contextPackager.js       # buildRAGContext, buildSystemPrompt, buildUserPrompt
+│               ├── intentClassifier.js      # classifyIntent, getRetrievalStrategy
+│               ├── normalizer.js            # normalizeAndDeduplicate (unified source shape)
+│               ├── orchestrator.js          # runRetrievalPipeline (full pipeline entry point)
+│               ├── queryExpander.js         # expandQuery (source-specific query variants)
+│               ├── reranker.js              # rerankCandidates, selectForContext, computeEvidenceStrength
+│               └── retriever.js            # ⚠️ Placeholder — not used by orchestrator
+│
+├── llm-service/
+│   ├── .python-version                      # Python version pin (3.11.x)
+│   ├── Dockerfile                           # LLM service container image (Python 3.11 slim)
+│   ├── main.py                              # FastAPI app: /generate /embed /rerank /suggestions /health
+│   ├── requirements.txt                     # Python dependency pins
+│   ├── start.sh                             # Runtime start: provider detection + uvicorn launch
+│   └── cache/
+│       ├── __init__.py                      # Cache module package exports
+│       └── semantic_cache.py               # SemanticLRUCache: similarity-aware LRU cache
+│
+├── hf-space-curalink-llm/
+│   ├── .gitattributes                       # Git LFS patterns for HF Space model artifacts
+│   ├── Dockerfile                           # HF Space container spec (mirrors llm-service)
+│   ├── main.py                              # HF Space LLM service entry (mirrors llm-service/main.py)
+│   ├── README.md                            # HF Space metadata card (title, emoji, sdk: docker)
+│   ├── requirements.txt                     # HF Space Python dependencies
+│   └── start.sh                             # HF Space startup script
+│
+├── hf-space-curalink-llm2/
+│   ├── Dockerfile                           # Alternate HF Space container spec
+│   ├── main.py                              # Alternate HF Space LLM service entry
+│   ├── README.md                            # HF Space metadata card for alternate space
+│   ├── requirements.txt                     # Alternate HF Space dependencies
+│   └── start.sh                             # Alternate HF Space startup script
+│
+├── scripts/
+│   ├── generate-project-context.mjs         # Snapshots routes/env/tree/deps → PROJECT_CONTEXT.json + .md
+│   ├── integration-smoke.mjs                # Spawns all services and runs end-to-end smoke assertions
+│   └── latency-bench.mjs                    # Runs timed query benchmarks; writes to graphify-out/
+│
+├── logs/                                    # Root log output directory (runtime artifact)
+│
+└── graphify-out/
+    ├── graph.html                           # Interactive D3-based module dependency visualization
+    ├── graph.json                           # Machine-readable graph (nodes = modules, edges = imports)
+    ├── GRAPH_REPORT.md                      # Human-readable Graphify analysis report
+    ├── manifest.json                        # Graphify run metadata (timestamp, config, entrypoints)
+    ├── cost.json                            # Token usage + cost metrics from graph generation run
+    ├── memory-map-<timestamp>.json          # In-memory module map snapshot at generation time
+    ├── latency-bench-<timestamp>.json       # Latency benchmark results from scripts/latency-bench.mjs
+    ├── .graphify_chunk_0N.json              # Chunked intermediate graph computation files
+    ├── cache/
+    │   └── *.json                           # Cached chunk computations (hash-named, ~78 files)
+    └── memory/
+        └── *.md                             # Human-readable memory notes from graph analysis run
 ```
 
-## 7. Key Functions & Modules
+---
 
-### Backend API and route functions
+## 11. graphify-out Folder
 
-| Function/Module | Location | Purpose | Inputs | Outputs | Role in Flow |
-|---|---|---|---|---|---|
-| `startServer` | `server/src/app.js` | Connect DB, start HTTP server, initialize scheduler | optional `port` | active HTTP server | Entry point for backend runtime |
-| `connectMongoAtlasStrict` | `server/src/app.js` | Atlas-first connection attempt with fallback URI support | env URIs + options | connected mongoose state or throw | Hard-gates API availability |
-| `healthHandler` | `server/src/app.js` | Unified health payload with DB + LLM status | request | health JSON | Polled by frontend system widgets |
-| `POST /sessions/:id/query` handler | `server/src/routes/query.js` | Main query execution route | session id + user message | assistant message + sources + stats | Core chat pipeline entry |
-| `GET /suggestions` handler | `server/src/routes/query.js` | Query suggestion service | partial query + session/history context | suggestion list | Powers autocomplete in landing/chat |
-| `POST /sessions` handler | `server/src/routes/sessions.js` | Create research session | disease/intent/location/demographics | created session | Session bootstrap |
-| `GET /sessions/:id` handler | `server/src/routes/sessions.js` | Load session + full messages | session id | session + ordered messages | Research page hydration |
-| `GET /sessions/:id/sources` | `server/src/routes/sessions.js` | Fetch all or latest source documents | session id + mode | source list | Evidence panel hydration |
-| `POST /sessions/:id/messages/:msgId/bookmark` | `server/src/routes/sessions.js` | Toggle assistant bookmark state | session/message id | bookmark state | Bookmark UX |
-| `GET /bookmarks` | `server/src/routes/sessions.js` | Grouped bookmark listing by session | optional limit | grouped bookmarks | Sidebar/bookmark panel |
-| `GET /analytics/overview` | `server/src/routes/analytics.js` | High-level dashboard metrics | optional query params | summary metrics object | Analytics home |
-| `GET /sessions/:id/export` | `server/src/routes/export.js` | Session export in JSON/CSV/PDF | session id + `format` | downloadable payload | Export menu |
+**Graphify** is an AI-powered codebase analysis tool that parses the project's module graph, clusters communities of related files, and emits a set of structured artifacts for visualization, auditing, and performance tracking.
 
-### Retrieval pipeline functions
+The `graphify-out/` directory is a **runtime artifact directory** — all files here are generated outputs, not source code. They should not be edited manually and are not committed as part of the application source (except for archival snapshots).
 
-| Function | Location | Purpose |
-|---|---|---|
-| `runRetrievalPipeline` | `server/src/services/pipeline/orchestrator.js` | Full retrieval + rerank + LLM + trace pipeline orchestration. |
-| `classifyIntent` | `server/src/services/pipeline/intentClassifier.js` | Heuristic intent classification from query + context intent. |
-| `getRetrievalStrategy` | `server/src/services/pipeline/intentClassifier.js` | Intent-to-strategy mapping controlling source/ranking behavior. |
-| `expandQuery` | `server/src/services/pipeline/queryExpander.js` | Creates source-specific query variants (PubMed/OpenAlex/CT). |
-| `fetchFromPubMed` | `server/src/services/apis/pubmed.js` | PubMed `esearch` + XML `efetch` retrieval adapter. |
-| `fetchFromOpenAlex` | `server/src/services/apis/openalex.js` | OpenAlex works retrieval with dedupe and abstract reconstruction. |
-| `fetchFromClinicalTrials` | `server/src/services/apis/clinicaltrials.js` | ClinicalTrials v2 retrieval with status/location/contact extraction. |
-| `normalizeAndDeduplicate` | `server/src/services/pipeline/normalizer.js` | Unified source format normalization and duplicate filtering. |
-| `rerankCandidates` | `server/src/services/pipeline/reranker.js` | Hybrid scoring (keyword + recency + location + credibility + boosts). |
-| `selectForContext` | `server/src/services/pipeline/reranker.js` | Chooses bounded evidence set for LLM context packaging. |
-| `computeEvidenceStrength` | `server/src/services/pipeline/reranker.js` | Computes `LIMITED/MODERATE/STRONG` label from evidence profile. |
-| `buildRAGContext` | `server/src/services/pipeline/contextPackager.js` | Builds citation-indexed context text and source index map. |
-| `buildSystemPrompt` | `server/src/services/pipeline/contextPackager.js` | Strict output contract prompt for source-cited JSON answer. |
-| `buildUserPrompt` | `server/src/services/pipeline/contextPackager.js` | Injects profile/query/context into LLM prompt payload. |
+| File / Pattern | Description |
+|---|---|
+| `graph.html` | Interactive D3-force visualization of the project's module dependency graph. Nodes represent files/modules; edges represent import relationships. Open in any browser to explore the dependency topology. |
+| `graph.json` | Machine-readable JSON graph data. Structure: `{ nodes: [{ id, label, group, size }], edges: [{ source, target, weight }] }`. Consumed by `graph.html` and external tooling. |
+| `GRAPH_REPORT.md` | Human-readable Graphify analysis report. Includes community clusters, high-centrality nodes, orphan detection, and coupling metrics. |
+| `manifest.json` | Graphify run metadata: timestamp, version, entrypoints analyzed, configuration used. Used for reproducibility auditing. |
+| `cost.json` | Token usage and estimated API cost from the Graphify generation run. Tracks prompt tokens, completion tokens, and model used per chunk. |
+| `memory-map-<timestamp>.json` | Snapshot of the in-memory module map at the time of generation. Useful for diffing graph state across runs. Timestamped to allow multi-run comparison. |
+| `latency-bench-<timestamp>.json` | Latency benchmark report written by `scripts/latency-bench.mjs`. Contains per-endpoint timing percentiles (p50, p95, p99), sample counts, and error rates. |
+| `.graphify_chunk_0N.json` | Chunked intermediate computation files produced during graph generation for large codebases. Used internally by Graphify; not intended for direct consumption. |
+| `cache/*.json` | Cached chunk computation objects (hash-named). Allows Graphify to skip re-processing unchanged files on subsequent runs. Approximately 78 files per run. |
+| `memory/*.md` | Human-readable memory notes generated during the graph analysis run. Contain module summaries, dependency observations, and cluster descriptions. |
 
-### Backend support services
+---
 
-| Function/Module | Location | Purpose |
-|---|---|---|
-| `callLLM`, `generateSmartSuggestions`, `semanticRerank` | `server/src/services/llm.js` | Typed HTTP client bridge to FastAPI LLM service. |
-| `parseLLMResponse` | `server/src/services/llm.js` | Resilient parser + schema normalization + citation-safe fallback. |
-| `getCachedQueryResult` / `setCachedQueryResult` | `server/src/services/queryResultCache.js` | Session/query scoped response cache with TTL/LRU behavior. |
-| `getAnalyticsOverview` and related methods | `server/src/services/analyticsService.js` | Aggregation-based analytics API payload builder. |
-| `createSessionExportPayload`, `buildCsvExport`, `buildPdfExport` | `server/src/services/export.js` | Constructs export payloads and renders fallback-safe PDF. |
-| `startAnalyticsScheduler` | `server/src/services/scheduler.js` | Cron-driven periodic `system_snapshot` analytics writes. |
+## 12. Complete API Reference
 
-### Frontend high-value modules
+### Backend API (`server` — Express)
 
-| Module | Location | Purpose |
-|---|---|---|
-| `useAppStore` | `client/src/store/useAppStore.js` | Central state for session, messages, selected sources, tab, errors. |
-| `api` + `getSystemHealth` | `client/src/utils/api.js` | Backend API abstraction, retries/fallback, health cache. |
-| `LandingPage` | `client/src/pages/LandingPage.jsx` | Session setup, suggestions, starter query launch. |
-| `ResearchInterface` | `client/src/pages/ResearchInterface.jsx` | Main three-panel workspace + bootstrap/focus behavior. |
-| `ChatPanel` + `ChatInput` | `client/src/components/chat` | Query dispatch, message rendering, suggestion-driven input UX. |
-| `EvidencePanel` | `client/src/components/evidence/EvidencePanel.jsx` | Publications/trials/researchers/timeline tabs. |
-| `BookmarksPanel` + `BookmarkToggle` | `client/src/components/features` | Bookmark persistence and grouped retrieval UX. |
-| `SessionExportMenu` | `client/src/components/features/SessionExportMenu.jsx` | Download session exports by format. |
-| `Analytics` | `client/src/pages/Analytics.jsx` | Overview + session drilldown visualization. |
+All routes are prefixed with `/api` unless otherwise noted. The server also mounts root-level health aliases at `/` and `/health`.
 
-### FastAPI LLM service key functions
-
-| Function | Location | Purpose |
-|---|---|---|
-| `generate` | `llm-service/main.py` | Main generation endpoint with semantic cache + provider chain. |
-| `embed` | `llm-service/main.py` | Text embedding endpoint with sentence-transformers/Ollama/hash fallback. |
-| `rerank` | `llm-service/main.py` | Semantic reranking endpoint over document list. |
-| `suggest` | `llm-service/main.py` | Query suggestion generation endpoint. |
-| `invoke_provider_chain` | `llm-service/main.py` | Provider order resolution (`groq`/`ollama`/local fallback). |
-| `ensure_structured_schema` | `llm-service/main.py` | Strict response schema normalization and citation filtering. |
-| `extract_json` | `llm-service/main.py` | Robust JSON extraction from model text responses. |
-| `lookup_semantic_cache` / `store_semantic_cache` | `llm-service/main.py` | In-memory semantic response cache read/write logic. |
-| `SemanticLRUCache` | `llm-service/cache/semantic_cache.py` | Reusable similarity-aware LRU cache utility (module-level support). |
-
-## 8. API Reference
-
-### Backend API (`server`)
-
-| Method | Path | Purpose | Request Body | Response Summary |
+| Method | Path | Purpose | Request Body / Params | Response Shape |
 |---|---|---|---|---|
-| GET | `/` | API root metadata | - | service/version/timestamp |
-| GET | `/health` | Health alias | - | health payload |
-| GET | `/api/health` | Primary health endpoint | - | status + services + uptime |
-| POST | `/api/sessions` | Create session | `{ disease, intent, location, demographics }` | `{ session }` |
-| GET | `/api/sessions` | Recent sessions list | - | `{ sessions[] }` |
-| GET | `/api/sessions/:id` | Session + full message history | - | `{ session, messages[] }` |
-| DELETE | `/api/sessions/:id` | Delete session + related records | - | `{ message }` |
-| GET | `/api/sessions/:id/sources` | Session source docs | optional `mode=latest` | `{ sources[] }` |
-| GET | `/api/sessions/:id/sources/:messageId` | Sources for assistant message | - | `{ messageId, sources[] }` |
-| GET | `/api/sessions/:id/insights` | Structured insight payload | - | structured insights snapshot |
-| POST | `/api/sessions/:id/query` | Execute retrieval + generation pipeline | `{ message }` | `{ message, sources, stats, evidenceStrength, sourceIndex, trace }` |
-| GET | `/api/suggestions` | Query suggestions | `q`, `limit`, optional `sessionId` | `{ suggestions[] }` |
-| GET | `/api/sessions/history/search` | Search message history | `q`, `limit` | `{ query, limit, results[] }` |
-| POST | `/api/sessions/:id/messages/:msgId/bookmark` | Toggle bookmark | - | bookmark status payload |
-| GET | `/api/bookmarks` | Grouped bookmarks | optional `limit` | `{ totalBookmarks, groups[] }` |
-| GET | `/api/sessions/:id/export` | Export session | `format=pdf|json|csv` | download stream/payload |
-| GET | `/api/analytics/overview` | Main analytics overview | `days`, `topIntentsLimit` | totals/latency/intents/activity |
-| GET | `/api/analytics/sessions/:id/breakdown` | Session analytics | - | session-level breakdown |
-| GET | `/api/analytics/top-diseases` | Disease ranking | optional `limit` | `{ diseases[] }` |
-| GET | `/api/analytics/intent-breakdown` | Intent frequency | - | `{ intents[] }` |
-| GET | `/api/analytics/source-stats` | Source distribution stats | - | `{ sources, total, distribution }` |
-| GET | `/api/analytics/trial-status` | Trial status distribution | - | `{ statuses[] }` |
-| GET | `/api/analytics/snapshots` | Scheduler snapshots | optional `limit` | `{ snapshots[] }` |
+| `GET` | `/` | API root metadata | — | `{ service, version, timestamp, status }` |
+| `GET` | `/health` | Health alias (root) | — | health payload (see `/api/health`) |
+| `GET` | `/api/health` | Primary health endpoint | — | `{ status, services: { db, llm }, uptime, version }` |
+| `POST` | `/api/sessions` | Create a new research session | `{ disease, intent?, location?, demographics? }` | `{ session: { _id, disease, intent, ... } }` |
+| `GET` | `/api/sessions` | List recent sessions | `limit?` | `{ sessions[] }` |
+| `GET` | `/api/sessions/:id` | Load session with full message history | — | `{ session, messages[] }` |
+| `DELETE` | `/api/sessions/:id` | Delete session and all related records | — | `{ message: "deleted" }` |
+| `GET` | `/api/sessions/:id/sources` | Fetch source documents for a session | `mode=latest?` | `{ sources[] }` |
+| `GET` | `/api/sessions/:id/sources/:messageId` | Fetch sources used by a specific assistant message | — | `{ messageId, sources[] }` |
+| `GET` | `/api/sessions/:id/conflicts` | Aggregated conflicting evidence groups | — | `{ totalConflicts, outcomeGroups[] }` |
+| `POST` | `/api/sessions/:id/brief/generate` | Generate a concise session research brief | — | `{ brief, version }` |
+| `GET` | `/api/sessions/:id/brief` | Retrieve the latest generated brief | — | `{ brief }` |
+| `GET` | `/api/sessions/:id/insights` | Structured session insight payload | — | `{ latency, sourceStats, intents, timeline, ... }` |
+| `POST` | `/api/sessions/:id/query` | Execute the full retrieval + generation pipeline | `{ message }` | `{ message, sources[], stats, evidenceStrength, sourceIndex, trace }` |
+| `GET` | `/api/suggestions` | Query autocomplete suggestions | `q`, `limit?`, `sessionId?` | `{ suggestions[] }` |
+| `GET` | `/api/sessions/history/search` | Full-text search over message history | `q`, `limit?` | `{ query, limit, results[] }` |
+| `POST` | `/api/sessions/:id/messages/:msgId/bookmark` | Toggle bookmark state on an assistant message | — | `{ isBookmarked, messageId }` |
+| `GET` | `/api/bookmarks` | All bookmarked messages grouped by session | `limit?` | `{ totalBookmarks, groups[] }` |
+| `GET` | `/api/sessions/:id/export` | Export a session in a specific format | `format=pdf\|json\|csv` | Binary stream (PDF) or JSON payload or CSV text |
+| `GET` | `/api/analytics/overview` | Main analytics dashboard metrics | `days?`, `topIntentsLimit?` | `{ totals, latency, topIntents, activity[], sourceDistribution }` |
+| `GET` | `/api/analytics/sessions/:id/breakdown` | Per-session analytics breakdown | — | `{ session, messageCount, sourceCount, avgLatency, intents[], ... }` |
+| `GET` | `/api/analytics/top-diseases` | Disease query frequency ranking | `limit?` | `{ diseases: [{ disease, count }] }` |
+| `GET` | `/api/analytics/intent-breakdown` | Intent type frequency distribution | — | `{ intents: [{ intentType, count }] }` |
+| `GET` | `/api/analytics/source-stats` | Source type distribution across all queries | — | `{ sources, total, distribution: { pubmed, openalex, clinicaltrials } }` |
+| `GET` | `/api/analytics/trial-status` | Clinical trial status distribution | — | `{ statuses: [{ status, count }] }` |
+| `GET` | `/api/analytics/snapshots` | Cron-generated system snapshot history | `limit?` | `{ snapshots[] }` |
 
-### LLM service API (`llm-service` and HF clone)
+### LLM Service API (`llm-service` / `hf-space-curalink-llm`)
 
-| Method | Path | Purpose | Request Body | Response Summary |
+| Method | Path | Purpose | Request Body | Response Shape |
 |---|---|---|---|---|
-| GET | `/` | LLM service metadata | - | service/version/uptime |
-| GET | `/health` | LLM health | - | status + llm service state |
-| GET | `/api/health` | Health alias | - | status + llm service state |
-| POST | `/generate` | Structured generation | `{ system_prompt, user_prompt, temperature, max_tokens }` | `text`, `parsed`, provider/model/trace |
-| POST | `/embed` | Embeddings | `{ texts[] }` | embeddings + mode/model |
-| POST | `/rerank` | Semantic rerank | `{ query, documents[], top_k }` | ranked ids/scores |
-| POST | `/suggestions` | Suggestion generation | `{ partial_query, history[], common_topics[], limit }` | suggestion list |
+| `GET` | `/` | LLM service metadata | — | `{ service, version, uptime, providers }` |
+| `GET` | `/health` | LLM service health check | — | `{ status, llm_available, cache_size, uptime }` |
+| `GET` | `/api/health` | Health alias | — | same as `/health` |
+| `POST` | `/generate` | Structured LLM generation with cache + fallback | `{ system_prompt, user_prompt, temperature?, max_tokens? }` | `{ text, parsed, provider, model, cached, latency_ms, trace }` |
+| `POST` | `/embed` | Text embedding via sentence-transformers or fallback | `{ texts: string[] }` | `{ embeddings: float[][], mode, model }` |
+| `POST` | `/rerank` | Semantic reranking of document list | `{ query, documents: string[], top_k? }` | `{ ranked_ids: int[], scores: float[] }` |
+| `POST` | `/suggestions` | Query suggestion generation | `{ partial_query, history?, common_topics?, limit? }` | `{ suggestions: string[] }` |
 
-## 9. Database / Data Models
+---
 
-### Data model diagram
+## 13. Database Schema & Models
+
+All four MongoDB collections are modeled with Mongoose 8. The schema design favors append-only event patterns for `Analytics` and `Message`, with upsert semantics for `SourceDoc` reuse.
+
+### Entity Relationship Diagram
 
 ```mermaid
 erDiagram
-  SESSION ||--o{ MESSAGE : has
-  SESSION ||--o{ ANALYTICS : logs
-  MESSAGE }o--o{ SOURCEDOC : references_by_usedSourceIds
+  SESSION ||--o{ MESSAGE : "has many"
+  SESSION ||--o{ ANALYTICS : "logs events"
+  MESSAGE }o--o{ SOURCEDOC : "references via usedSourceIds"
 
   SESSION {
-    ObjectId _id
-    string disease
-    string intent
-    object location
-    object demographics
-    string title
-    string[] queryHistory
-    number messageCount
-    datetime createdAt
-    datetime updatedAt
+    ObjectId   _id         PK
+    string     disease
+    string     intent
+    object     location
+    object     demographics
+    string     title
+    string[]   queryHistory
+    number     messageCount
+    datetime   createdAt
+    datetime   updatedAt
   }
 
   MESSAGE {
-    ObjectId _id
-    ObjectId sessionId
-    string role
-    string text
-    object structuredAnswer
-    string[] usedSourceIds
-    object retrievalStats
-    object trace
-    string intentType
-    string contextBadge
-    boolean isBookmarked
-    datetime createdAt
+    ObjectId   _id              PK
+    ObjectId   sessionId        FK
+    string     role
+    string     text
+    object     structuredAnswer
+    string[]   usedSourceIds
+    object     retrievalStats
+    object     trace
+    string     intentType
+    string     contextBadge
+    boolean    isBookmarked
+    datetime   createdAt
   }
 
   SOURCEDOC {
-    string _id
-    string type
-    string source
-    string title
-    string abstract
-    string[] authors
-    number year
-    string url
-    string status
-    string[] locations
-    number relevanceScore
-    number finalScore
-    number timesUsed
-    datetime updatedAt
+    string     _id              PK "external ID: PMID / NCT / OA"
+    string     type
+    string     source
+    string     title
+    string     abstract
+    string[]   authors
+    number     year
+    string     url
+    string     status
+    string[]   locations
+    number     relevanceScore
+    number     finalScore
+    number     timesUsed
+    datetime   updatedAt
   }
 
   ANALYTICS {
-    ObjectId _id
-    string event
-    string disease
-    string intentType
-    ObjectId sessionId
-    mixed metadata
-    datetime createdAt
+    ObjectId   _id         PK
+    string     event
+    string     disease
+    string     intentType
+    ObjectId   sessionId   FK
+    mixed      metadata
+    datetime   createdAt
   }
 ```
 
-### Why this structure
+### Session Model (`server/src/models/Session.js`)
 
-- `Session` captures stable user context and top-level conversation metadata.
-- `Message` stores immutable conversational chronology and structured answer artifacts.
-- `SourceDoc` stores normalized evidence entities independently so they can be reused, ranked, and tracked by usage frequency.
-- `Analytics` keeps event-style append-only telemetry (query/export/session/system_snapshot), enabling both operational and product analytics without mutating session records.
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `_id` | ObjectId | auto | MongoDB document ID |
+| `disease` | String | Yes | Research subject (e.g., `"Type 2 Diabetes"`) |
+| `intent` | String | No | User-declared intent type |
+| `location` | Object | No | `{ city, country, coordinates }` for location-boosted retrieval |
+| `demographics` | Object | No | `{ ageRange, sex }` for context-aware prompts |
+| `title` | String | No | Auto-generated session title |
+| `queryHistory` | String[] | No | Chronological list of user query strings |
+| `messageCount` | Number | No | Denormalized count of messages in session |
+| `createdAt` | Date | auto | Mongoose timestamp |
+| `updatedAt` | Date | auto | Mongoose timestamp |
 
-### Important indexes
+**Indexes:** `updatedAt`, `createdAt`, compound `{ disease, updatedAt }` for recent-by-disease queries.
 
-- `Session`: `updatedAt`, `createdAt`, and `{ disease, updatedAt }` for recent retrieval views.
-- `Message`: `{ sessionId, createdAt }`, `{ sessionId, role, createdAt }`, bookmark index.
-- `SourceDoc`: source/type/timesUsed indexes for analytics and recency queries.
-- `Analytics`: event-first indexes and event+disease/event+intent composite indexes.
+### Message Model (`server/src/models/Message.js`)
 
-## 10. How It Works - Step-by-Step
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `_id` | ObjectId | auto | MongoDB document ID |
+| `sessionId` | ObjectId | Yes | Foreign key to `Session` |
+| `role` | String | Yes | `"user"` or `"assistant"` |
+| `text` | String | Yes | Raw message text |
+| `structuredAnswer` | Object | No | `{ summary, keyFindings[], limitations, evidenceStrength, usedSourceIds[] }` |
+| `usedSourceIds` | String[] | No | External source IDs referenced in this answer |
+| `retrievalStats` | Object | No | `{ candidatesTotal, afterNormalize, afterRerank, selectedForContext, semanticRerank }` |
+| `trace` | Object | No | `{ provider, model, latencyMs, cacheHit, intentType, evidenceStrength }` |
+| `intentType` | String | No | Classified intent from pipeline |
+| `contextBadge` | String | No | Display label for evidence confidence |
+| `isBookmarked` | Boolean | No | User bookmark toggle state |
+| `createdAt` | Date | auto | Mongoose timestamp |
 
-1. User opens landing page and submits disease + optional context.
-2. Frontend creates a session via `POST /api/sessions`.
-3. User sends first message; frontend posts to `POST /api/sessions/:id/query`.
-4. Backend validates session/message and loads recent history for follow-up context.
-5. Pipeline classifies intent and builds source-specific query variants.
-6. Backend fetches candidate pools from PubMed/OpenAlex/ClinicalTrials in parallel.
-7. Results are normalized into a unified source shape and deduplicated.
-8. Candidates are ranked by hybrid scoring; optional semantic reranking is applied unless skip threshold is met.
-9. Context subset is selected for prompt budget and citation mapping.
-10. Prompt packager emits strict system + user prompts with citation IDs.
-11. Backend calls FastAPI `/generate`; service executes semantic cache lookup and provider workflow.
-12. LLM output is parsed, schema-normalized, citation-validated, and fallback-corrected when needed.
-13. Backend upserts selected source docs and records analytics query event.
-14. Backend persists user+assistant messages and session query history.
-15. Frontend receives assistant payload, updates store, and renders structured answer + evidence panels.
-16. Optional user actions (bookmark/export/analytics/history search) hit dedicated backend routes and consume existing stored artifacts.
+**Indexes:** `{ sessionId, createdAt }` for ordered fetch, `{ sessionId, role, createdAt }` for role-filtered queries, `{ sessionId, isBookmarked }` for bookmark retrieval.
 
-## 11. Setup & Installation
+### SourceDoc Model (`server/src/models/SourceDoc.js`)
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `_id` | String | Yes | External ID (PMID, NCT number, or OpenAlex ID) |
+| `type` | String | Yes | `"publication"` or `"trial"` |
+| `source` | String | Yes | `"pubmed"`, `"openalex"`, or `"clinicaltrials"` |
+| `title` | String | Yes | Document title |
+| `abstract` | String | No | Full abstract text |
+| `authors` | String[] | No | Author display name list |
+| `year` | Number | No | Publication/trial year |
+| `url` | String | No | Source URL or DOI link |
+| `status` | String | No | Trial status (`"RECRUITING"`, `"COMPLETED"`, etc.) |
+| `locations` | String[] | No | Trial site location strings |
+| `relevanceScore` | Number | No | Raw keyword relevance score |
+| `finalScore` | Number | No | Hybrid reranked final score |
+| `timesUsed` | Number | No | Incremented on each upsert — tracks cross-session reuse |
+| `updatedAt` | Date | auto | Last upsert timestamp |
+
+**Indexes:** `source`, `type`, `timesUsed`, `{ source, type }` for analytics distribution queries.
+
+### Analytics Model (`server/src/models/Analytics.js`)
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `_id` | ObjectId | auto | MongoDB document ID |
+| `event` | String | Yes | Event type: `"query"`, `"export"`, `"session_create"`, `"system_snapshot"` |
+| `disease` | String | No | Disease context of the event |
+| `intentType` | String | No | Classified intent for query events |
+| `sessionId` | ObjectId | No | FK to `Session` for query/export events |
+| `metadata` | Mixed | No | Event-specific payload (latency, provider, source counts, etc.) |
+| `createdAt` | Date | auto | Mongoose timestamp |
+
+**Indexes:** `event` (primary filter), `{ event, disease }`, `{ event, intentType }`, `createdAt` for time-series range queries. Append-only; records are never updated.
+
+---
+
+## 14. Key Functions Reference
+
+### Retrieval Pipeline Functions
+
+All located in `server/src/services/pipeline/`.
+
+| Function | File | Purpose | Key Inputs | Key Outputs |
+|---|---|---|---|---|
+| `runRetrievalPipeline` | `orchestrator.js` | Full pipeline orchestration entry point | `session`, `message`, `conversationHistory` | `{ responseText, structuredAnswer, sources, trace, evidenceStrength, sourceIndex }` |
+| `classifyIntent` | `intentClassifier.js` | Heuristic intent classification | `query`, `sessionIntent` | Intent string (`TREATMENT`, `DIAGNOSIS`, etc.) |
+| `getRetrievalStrategy` | `intentClassifier.js` | Maps intent to retrieval parameters | `intentType` | `{ sources[], boostTrials, fetchLimits, weights }` |
+| `expandQuery` | `queryExpander.js` | Builds source-specific query variants | `query`, `disease`, `intent`, `strategy` | `{ pubmedQuery, openalexQuery, ctQuery }` |
+| `fetchFromPubMed` | `apis/pubmed.js` | PubMed esearch + efetch XML retrieval | `query`, `limit` | Raw PubMed candidate array |
+| `fetchFromOpenAlex` | `apis/openalex.js` | OpenAlex Works API retrieval | `query`, `limit` | Raw OpenAlex candidate array |
+| `fetchFromClinicalTrials` | `apis/clinicaltrials.js` | ClinicalTrials.gov v2 retrieval | `query`, `limit` | Raw ClinicalTrials candidate array |
+| `normalizeAndDeduplicate` | `normalizer.js` | Unified source format + deduplication | Three raw candidate arrays | Unified `SourceDoc`-shaped array |
+| `rerankCandidates` | `reranker.js` | Hybrid scoring (keyword + recency + location + credibility + boost) | `candidates[]`, `query`, `session`, `strategy` | Sorted scored candidate array |
+| `selectForContext` | `reranker.js` | Selects top-N within token budget | `rankedCandidates[]`, `maxTokenBudget` | `{ selected[], citationMap }` |
+| `computeEvidenceStrength` | `reranker.js` | Classifies evidence quality level | `selectedCandidates[]` | `"LIMITED" \| "MODERATE" \| "STRONG"` |
+| `buildRAGContext` | `contextPackager.js` | Citation-indexed context text + source index | `selectedCandidates[]` | `{ contextText, sourceIndex }` |
+| `buildSystemPrompt` | `contextPackager.js` | Strict JSON output contract system prompt | `evidenceStrength`, `sourceIndex` | System prompt string |
+| `buildUserPrompt` | `contextPackager.js` | Injects query + context into user prompt | `query`, `contextText`, `session`, `history` | User prompt string |
+
+### Backend Support Services
+
+| Function / Module | File | Purpose |
+|---|---|---|
+| `callLLM` | `services/llm.js` | POSTs to FastAPI `/generate`; returns `{ text, parsed, provider, model, latency_ms }` |
+| `parseLLMResponse` | `services/llm.js` | Extracts JSON from raw LLM text; normalizes schema; applies citation safety fallback |
+| `generateSmartSuggestions` | `services/llm.js` | Calls FastAPI `/suggestions` with query + history context |
+| `semanticRerank` | `services/llm.js` | Calls FastAPI `/rerank`; returns reordered candidate array |
+| `getCachedQueryResult` | `services/queryResultCache.js` | Reads session/query scoped response cache; returns `null` on miss |
+| `setCachedQueryResult` | `services/queryResultCache.js` | Writes response to cache with TTL and LRU eviction |
+| `getAnalyticsOverview` | `services/analyticsService.js` | Aggregates MongoDB analytics events into dashboard-ready metrics payload |
+| `createSessionExportPayload` | `services/export.js` | Assembles session + messages + sources into a structured export object |
+| `buildCsvExport` | `services/export.js` | Renders session export as CSV text with header row |
+| `buildPdfExport` | `services/export.js` | Renders session export as PDF buffer using jsPDF |
+| `startAnalyticsScheduler` | `services/scheduler.js` | Registers a `node-cron` job for periodic `system_snapshot` analytics writes |
+
+### FastAPI LLM Functions (`llm-service/main.py`)
+
+| Function | Purpose |
+|---|---|
+| `generate(request: GenerateRequest)` | Main generation endpoint: cache lookup → provider chain → schema enforcement → cache store |
+| `embed(request: EmbedRequest)` | Embedding endpoint: sentence-transformers → Ollama fallback → hash synthetic |
+| `rerank(request: RerankRequest)` | Cosine similarity reranking over document list; returns ranked IDs + scores |
+| `suggest(request: SuggestRequest)` | Calls provider chain with short-form suggestion prompt; parses list from response |
+| `invoke_provider_chain(system, user, temp, max_tokens)` | Tries `groq → huggingface → ollama → local_fallback` in order; raises on all failures |
+| `ensure_structured_schema(parsed_json, source_index)` | Fills missing schema fields, filters invalid citation IDs, normalizes types |
+| `extract_json(text)` | Multi-strategy JSON extraction: regex + bracket-depth parser + fallback |
+| `lookup_semantic_cache(prompt_embedding)` | Cosine similarity scan over `SemanticLRUCache`; returns hit or `None` |
+| `store_semantic_cache(prompt_embedding, response)` | Stores response in `SemanticLRUCache` with eviction |
+| `SemanticLRUCache(max_size, threshold)` | Class in `cache/semantic_cache.py`: similarity-aware LRU cache with cosine lookup |
+
+### Frontend Key Modules
+
+| Module | File | Purpose |
+|---|---|---|
+| `useAppStore` | `store/useAppStore.js` | Central Zustand store: session, messages, selected sources, active tab, loading/error states |
+| `api` + `getSystemHealth` | `utils/api.js` | Axios instance + all typed API calls + health polling cache |
+| `LandingPage` | `pages/LandingPage.jsx` | Session creation form, suggestion chips, starter query launch |
+| `ResearchInterface` | `pages/ResearchInterface.jsx` | Three-panel workspace: sidebar + chat + evidence; bootstrap and focus behavior |
+| `ChatPanel` | `components/chat/ChatPanel.jsx` | Query dispatch, message scroll, loading and error states |
+| `ChatInput` | `components/chat/ChatInput.jsx` | Auto-resizing textarea with suggestion-driven input and keyboard shortcuts |
+| `EvidencePanel` | `components/evidence/EvidencePanel.jsx` | Publications / Trials / Researchers / Timeline tabbed container |
+| `BookmarksPanel` | `components/features/BookmarksPanel.jsx` | Bookmarked message list grouped by session with jump-to actions |
+| `SessionExportMenu` | `components/features/SessionExportMenu.jsx` | Format picker + download trigger + progress feedback |
+| `Analytics` | `pages/Analytics.jsx` | Overview metrics + Recharts visualizations + per-session drilldown |
+
+---
+
+## 15. Setup & Installation
 
 ### Prerequisites
 
-- Node.js 20.x (root and backend scripts).
-- Python 3.11.x (LLM services).
-- MongoDB Atlas connection string.
-- Optional: Ollama runtime for local provider mode.
-- Optional: Groq API key for hosted generation mode.
+| Requirement | Version | Notes |
+|---|---|---|
+| Node.js | 20.x LTS | Required for all JS services and scripts |
+| Python | 3.11.x | Required for `llm-service` and HF Space |
+| MongoDB Atlas | — | Free tier cluster is sufficient; get connection string |
+| Groq API key | — | Optional but recommended for fast hosted generation |
+| Ollama | Latest | Optional; required for fully offline mode |
 
-### Install dependencies
+### 1. Clone the Repository
 
 ```bash
+git clone https://github.com/nikkkhil2935/curalink.git
+cd curalink
+```
+
+### 2. Install All Dependencies
+
+```bash
+# Root monorepo tools
 npm install
+
+# Frontend
 npm --prefix client install
+
+# Backend
 npm --prefix server install
+
+# LLM service (Python)
 pip install -r llm-service/requirements.txt
 ```
 
-### Recommended quick start
+### 3. Configure Environment Variables
+
+Copy the example files and fill in your values:
+
+```bash
+cp .env.example .env
+cp server/.env.example server/.env
+cp client/.env.example client/.env
+```
+
+See [Section 16 — Environment Variables](#16-environment-variables) for a full description of every variable.
+
+### 4. Quick Start (Recommended)
+
+The single command below starts all three services with dynamic port selection:
 
 ```bash
 npm run start:all
 ```
 
 This starts:
+- **LLM service** via `uvicorn` on the port resolved from `LLM_PORT` (default: 8001)
+- **Backend server** via `npm run dev` in `server/`
+- **Vite frontend** via `npm run dev` in `client/`
 
-- `llm-service` via `uvicorn` (port auto-resolved from `LLM_PORT` base).
-- backend server (`server` package `dev` script).
-- Vite client (`client` package `dev` script).
+Open `http://localhost:5173` in your browser.
 
-### Visual editing with React Rewrite
+### 5. Manual Three-Terminal Start
 
-You can visually edit React UI and write confirmed changes back to source files while the Vite dev server is running.
+If you need to start services individually:
 
-From workspace root:
-
-```bash
-npm run rewrite
-```
-
-From `client/` directly:
-
-```bash
-npm run rewrite
-```
-
-Useful variants:
-
-```bash
-npm run rewrite:no-open
-npm run rewrite -- --verbose
-npm run rewrite -- 5173
-```
-
-Requirements:
-
-- Run against a development server, not a production build.
-- Start from the React app root (`client/`) if running the CLI directly (`npx react-rewrite`).
-- Node.js 20+.
-
-### Manual start (3 terminals)
-
-LLM service:
-
+**Terminal 1 — LLM Service:**
 ```bash
 cd llm-service
-PRIMARY_LLM_PROVIDER=groq GROQ_API_KEY=<key> python -m uvicorn main:app --app-dir . --host 127.0.0.1 --port 8001
+PRIMARY_LLM_PROVIDER=groq \
+GROQ_API_KEY=<your-key> \
+python -m uvicorn main:app --app-dir . --host 127.0.0.1 --port 8001 --reload
 ```
 
-Backend:
-
+**Terminal 2 — Backend:**
 ```bash
 cd server
 LLM_SERVICE_URL=http://127.0.0.1:8001 npm run dev
 ```
 
-Frontend:
-
+**Terminal 3 — Frontend:**
 ```bash
 cd client
 npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
-### Verification commands
+### 6. Verification Commands
+
+After starting, confirm all services are healthy:
 
 ```bash
-npm run check:server
-npm run check:client
-npm run check:llm
+# Individual service checks
+npm run check:server   # curls /api/health on backend
+npm run check:client   # checks Vite HMR server response
+npm run check:llm      # curls /health on LLM service
+
+# Full end-to-end smoke test
 node scripts/integration-smoke.mjs
 ```
 
-## 12. Configuration
+Expected output: all checks `✓ PASS`.
 
-### Root-level scripts and config
+### 7. Visual Editing with React Rewrite
 
-| File | What It Controls |
-|---|---|
-| `package.json` | Monorepo orchestration scripts (`start:all`, `doctor`, checks). |
-| `start.js` | Dynamic port allocation, provider env forwarding, multi-service process control. |
-| `render.yaml` | Render service definitions (curalink-api and curalink-llm) and env wiring. |
-| `.env.example` | Local environment baseline examples. |
+React Rewrite allows WYSIWYG visual editing of React components with live write-back to source files:
 
-### Backend environment variables (`server/.env.example`)
+```bash
+# From workspace root
+npm run rewrite
 
-| Variable | Purpose |
-|---|---|
-| `MONGODB_URI` | Primary MongoDB connection URI (required). |
-| `MONGODB_URI_FALLBACK` | Optional fallback URI when primary SRV path fails in some environments. |
-| `LLM_SERVICE_URL` | Backend-to-LLM service base URL. |
-| `LLM_SERVICE_TOKEN` | Optional bearer token for private LLM endpoints (for example private Hugging Face Spaces). |
-| `FRONTEND_URL` | Comma-separated CORS allowlist origins. |
-| `PORT` | Backend listen port. |
-| `NODE_ENV` | Runtime mode. |
-| `APP_VERSION` | Version value in health payloads. |
-| `TRUST_PROXY` | Express proxy trust setting. |
-| `PUBMED_EMAIL` | Polite identifier for PubMed requests. |
-| `MONGODB_*_TIMEOUT/MS/POOL` vars | Mongo client timeout/pool tuning knobs. |
-| `QUERY_CACHE_TTL_MS`, `QUERY_CACHE_MAX_ENTRIES` | Query response cache behavior. |
-| `LLM_KEEP_ALIVE_MS`, `LLM_MAX_SOCKETS` | HTTP keep-alive settings for LLM client. |
-| `ANALYTICS_SCHEDULER_ENABLED`, `ANALYTICS_SNAPSHOT_CRON` | Snapshot scheduler enablement/frequency. |
+# From client/ directory
+npm run rewrite
 
-### Frontend environment variables
+# Variants
+npm run rewrite:no-open           # Don't auto-open browser
+npm run rewrite -- --verbose      # Verbose logging
+npm run rewrite -- 5173           # Target specific Vite port
+```
 
-| Variable | File | Purpose |
-|---|---|---|
-| `VITE_APP_NAME` | `client/.env.example` | UI branding label. |
-| `VITE_API_URL` | `client/.env.example`, `client/.env.production` | API base URL resolution in `api.js`. |
-| `VITE_DEV_API_PROXY` | optional at runtime | Vite `/api` proxy target in local development. |
-
-### LLM service environment variables
-
-| Variable | Purpose |
-|---|---|
-| `PRIMARY_LLM_PROVIDER` | Chooses provider order (`groq`, `huggingface`, or `ollama`). |
-| `GROQ_API_KEY`, `GROQ_MODEL` | Hosted provider credentials/model. |
-| `HF_API_TOKEN`, `HF_MODEL`, `HF_INFERENCE_URL` | Hugging Face Inference provider credentials/model/endpoint. |
-| `OLLAMA_URL`, `OLLAMA_MODEL` | Local model endpoint/model. |
-| `OLLAMA_EMBED_MODEL`, `OLLAMA_EMBED_TIMEOUT_SEC` | Ollama embedding fallback behavior. |
-| `LOCAL_FALLBACK_ENABLED` | Enables local synthetic fallback when providers fail. |
-| `FALLBACK_EMBED_DIM` | Hash embedding dimensionality. |
-| `USE_LANGGRAPH_WORKFLOW` | Enables LangGraph state workflow path for generation. |
-| `SEMANTIC_CACHE_THRESHOLD`, `SEMANTIC_CACHE_MAX_SIZE` | Generation semantic cache controls. |
-| `LOCAL_EMBED_MODEL`, `EMBEDDING_BACKGROUND_WARMUP` | sentence-transformer loading behavior. |
-
-### Render API to Hugging Face Space wiring
-
-1. In your Hugging Face Space settings, configure runtime variables:
-  - `PRIMARY_LLM_PROVIDER=huggingface` (or `groq` if you want Groq inside Space)
-  - `HF_API_TOKEN=<your_hf_token>`
-  - `HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3`
-  - `LOCAL_FALLBACK_ENABLED=true` (recommended safety net)
-2. In Render service `curalink-api`, set:
-  - `LLM_SERVICE_URL=https://nikkkhil2935-curalink-llm.hf.space`
-  - `LLM_SERVICE_TOKEN=<your_hf_token>` if the Space is private
-3. Redeploy `curalink-api` after updating env vars.
-4. Verify the linked path:
-  - `GET /api/health` on Render should show `llm: online` or `llm: degraded`
-  - `POST /api/sessions/:id/query` should return `provider` as `huggingface`, `groq`, or fallback depending on configured provider and availability.
-
-## 13. Design Decisions & Trade-offs
-
-### Major architectural decisions
-
-1. **Strict source-grounded answer contract**
-   - Decision: generation prompts enforce source IDs and structured JSON.
-   - Benefit: traceability and safer evidence review.
-   - Trade-off: stronger prompt constraints can reduce free-form fluency.
-
-2. **Three-service split (frontend, API, LLM)**
-   - Decision: keep model-serving concerns separate from retrieval API and UI.
-   - Benefit: independent scaling/deployment and cleaner responsibility boundaries.
-   - Trade-off: additional network hop and deployment complexity.
-
-3. **Hybrid retrieval scoring + optional semantic rerank**
-   - Decision: combine deterministic scoring with semantic rerank refinement.
-   - Benefit: resilient baseline ranking even when semantic provider is degraded.
-   - Trade-off: more moving parts and additional latency when semantic rerank is active.
-
-4. **Atlas-first Mongo connection hard gate**
-   - Decision: API returns `503` when DB disconnected (except health endpoints).
-   - Benefit: avoids silent buffering and stale assumption failures.
-   - Trade-off: stricter runtime dependency means reduced degraded-read capability.
-
-5. **In-memory caches at both API and LLM tiers**
-   - Decision: query cache, insights cache, semantic generation cache.
-   - Benefit: improved repeated-query latency and lower provider load.
-   - Trade-off: cache invalidation complexity and per-instance non-shared cache state.
-
-### Known limitations and caveats
-
-- `server/.env` currently contains a live secret value in repository workspace context. It should be rotated and removed from committed history for production hygiene.
-- `server/src/routes/sessions.js` includes a duplicate `/ :id/insights` route definition shape where one block references undefined helpers (`buildSessionInsights`, imported cache helpers not wired in that scope). The first route implementation still serves insights, but this duplication is a maintainability and potential runtime-risk hotspot.
-- `server/src/routes/sessions.js` uses `logger.error(...)` in analytics logging path without a corresponding import in the file, which can fail when that catch path executes.
-- `server/src/services/pipeline/retriever.js` is currently a placeholder and not part of the active orchestration path.
-- `hf-space-curalink-llm/main.py` mirrors `llm-service/main.py`, which introduces duplication risk if one is changed without syncing the other.
-
-### Operational trade-offs
-
-- **Provider flexibility vs deterministic output**: multi-provider fallback increases availability but adds variability in output shape quality, requiring heavy normalization.
-- **Large candidate retrieval vs latency**: high fetch limits improve coverage but increase total response time and pressure on external APIs.
-- **Rich frontend features vs complexity**: bookmarks/history/export/analytics improve UX but increase route/store/component coupling.
+> **Requirements:** Run against the Vite dev server (not a production build). Node.js 20+.
 
 ---
 
-## Additional Notes
+## 16. Environment Variables
 
-- Use `npm run doctor` as the default pre-commit health check to regenerate context and run all core checks.
-- Runtime-generated directories (`logs`, `graphify-out`) can grow quickly; treat them as artifacts, not source of truth.
-- For production, prefer secret injection through platform env settings (Render/HF Space), not checked-in `.env` files.
+### Backend (`server/.env`)
 
-## Appendix B - Graphify Artifact Inventory (One-by-One)
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `MONGODB_URI` | Yes | — | Primary MongoDB Atlas connection string |
+| `MONGODB_URI_FALLBACK` | No | — | Fallback URI when SRV resolution fails (some envs) |
+| `LLM_SERVICE_URL` | Yes | `http://127.0.0.1:8001` | Base URL for FastAPI LLM service |
+| `LLM_SERVICE_TOKEN` | No | — | Bearer token for private HF Space endpoints |
+| `FRONTEND_URL` | Yes | `http://localhost:5173` | CORS allowed origin(s), comma-separated |
+| `PORT` | No | `3001` | Backend HTTP listen port |
+| `NODE_ENV` | No | `development` | Runtime mode (`development` / `production`) |
+| `APP_VERSION` | No | `1.0.0` | Version string in `/api/health` response |
+| `TRUST_PROXY` | No | `false` | Express proxy trust (`true` behind Render/Nginx) |
+| `PUBMED_EMAIL` | No | — | Polite-use email in PubMed `tool` parameter |
+| `MONGODB_SERVER_SELECTION_TIMEOUT_MS` | No | `5000` | Atlas server selection timeout |
+| `MONGODB_CONNECT_TIMEOUT_MS` | No | `10000` | Atlas connection timeout |
+| `MONGODB_SOCKET_TIMEOUT_MS` | No | `45000` | Atlas socket timeout |
+| `MONGODB_MAX_POOL_SIZE` | No | `10` | Mongoose connection pool max size |
+| `QUERY_CACHE_TTL_MS` | No | `300000` | Query response cache TTL (5 minutes) |
+| `QUERY_CACHE_MAX_ENTRIES` | No | `100` | Query cache max entries before LRU eviction |
+| `LLM_KEEP_ALIVE_MS` | No | `60000` | HTTP keep-alive for LLM service calls |
+| `LLM_MAX_SOCKETS` | No | `10` | Max concurrent sockets to LLM service |
+| `ANALYTICS_SCHEDULER_ENABLED` | No | `true` | Enable periodic snapshot cron job |
+| `ANALYTICS_SNAPSHOT_CRON` | No | `0 * * * *` | Cron expression for snapshot frequency |
 
-Generated from the live workspace at document update time:
+### Frontend (`client/.env`)
 
-- graphify-out/.graphify_chunk_01.json
-- graphify-out/.graphify_chunk_02.json
-- graphify-out/.graphify_chunk_03.json
-- graphify-out/.graphify_chunk_04.json
-- graphify-out/.graphify_chunk_05.json
-- graphify-out/cache/0697142d2151c95b8db9f1d70bcfb540deb6323f6bcbfbe9ba069f4d85b6d890.json
-- graphify-out/cache/11dcd66dfb213d67018a648163170b32fb309ecd570abd15576ea2a7b20481ef.json
-- graphify-out/cache/12678eb1e91ab6aed3a2cdeab07dbc67d141ea359efd8d3e1a95ab164193d953.json
-- graphify-out/cache/135d589b30a2760dbd7e574a8204826da5bb6858c04c458f9871d0c15d6ced76.json
-- graphify-out/cache/14304f61deff944076da8a2fea6e551c55c4b8394917f688609b76a91f6a86b7.json
-- graphify-out/cache/14ac2ae68dac533939f500e75ba6da95548e18c0d705965b38a806a3a691e3be.json
-- graphify-out/cache/17639e0b369ef7dfe8b40405bf42d2e018cdbe35b6f819340cf0b912e7924ac3.json
-- graphify-out/cache/1a3cd671cf58d2f066ecc65807c7bdcc562d2e4688c0b34841e449fa65cea5ee.json
-- graphify-out/cache/1ec277d72c0acb69aa3c0083ac3cdc1ad2e519604d8b4509885cb2434c0178e2.json
-- graphify-out/cache/201b7b80dd593e1180d4c4e2d3022dec6651e0d3d9f27aea78427d084bc06178.json
-- graphify-out/cache/212bd57c8a2b051187e441f17ebcb03fe46cac7cd0b3a0f8a75cf6a8c16a052e.json
-- graphify-out/cache/21dc8550708fda8aeb73904270e16e54a8a414f103603d4935082792082fffc5.json
-- graphify-out/cache/2477a9820619626b308ce83ce9e83b7121879dc92c9fa6b3397897cac85b0473.json
-- graphify-out/cache/26c43b598aef99cdc72d6e649c8e30440af24c257651d05fe3e6a8e50161ce2e.json
-- graphify-out/cache/2a79f0dccfd312c669c7decbad3f76ebbda5b01aec2b2bd91ff9df8bf01df968.json
-- graphify-out/cache/2dca89b0b8a8743de6ddea2c1f8cbccb1e2b2aa1d6d2d110e3aa108bb69cad24.json
-- graphify-out/cache/2e69a7dcb55c215cdf9309201f3facfc624318449d4122d8995069e830666e39.json
-- graphify-out/cache/2fae11f6f79cead61651be61786c74e768b53f2f165a70259dbb04a930568b76.json
-- graphify-out/cache/307623338a731cac6d1cd2e536fce5f5a49b00ae698f198c16025a9aaf4e89ef.json
-- graphify-out/cache/322e05e71c046a2d18e0d4d641fda6a5db4434215ec3d96ec37df79d1614ce64.json
-- graphify-out/cache/367be278d8c98211905403c44b6548f1b3c539fcfd8439082a9998a3dc872dc6.json
-- graphify-out/cache/36e1ab1a21a6194b01e26424ea9f005c00804abd78476787c1edd50247817485.json
-- graphify-out/cache/3bc7a5097dacc2b6045559f982c673902d679942f7815360e10115ba9c126a33.json
-- graphify-out/cache/3e93e838f2ace86b3b194bfd5dd90e7b1ebc8e6946be3fa30e7ce1486ed0544c.json
-- graphify-out/cache/49c2612d126100b28c8aee8dad22b2231fd2b145a8fcf4b5503401ddd89dd7bf.json
-- graphify-out/cache/4cb918f227690a8447a104df1b5a1959cdf551f92dcb68f45140309eb4f9a71f.json
-- graphify-out/cache/4d2f83e6175d20d106d51bd244ef6c071cf739160cbaf889c8a4bb0eb750bdb2.json
-- graphify-out/cache/57b4ff68f6caca9439247200179bccb7e706968e10d67403cc5d5e202e287f93.json
-- graphify-out/cache/5e923257de803b020d4d27341b8e301c67fc1d69fc1cabc33693121090ab3947.json
-- graphify-out/cache/60848fe667dd2135fd60585226093fe711b55f88c1b8188dc7374961d7744f4e.json
-- graphify-out/cache/677e523bd8cd0bddef3925b5b784c963217bdea8ec91cd207a27d0562b7e9f91.json
-- graphify-out/cache/6934d7f313fa58f5ab380ef76c35a9db46c6ccdf6057981feb63509c65080aba.json
-- graphify-out/cache/69a634c88b47b8038ee531b32571a58b6a8090d7b17c2693007c9b8e75af9e3b.json
-- graphify-out/cache/6f083212563a48179b92f8299e3809f02e9a0834955c608f6b5a1d313f3e0d77.json
-- graphify-out/cache/732e2ce1ae7187ee15aff2c214657f1f6d1115507afddd28fb39365e98e11ad0.json
-- graphify-out/cache/74c7aae464913b22e9a7b7ab5b05476cc6f5af2b18f707ef3c46f9bd5e039f21.json
-- graphify-out/cache/7615e82a9a63b12efea9206bc27ccb446d898687dda94c3bcd94f932f522b40d.json
-- graphify-out/cache/762c32f5754663a4177fff0ae099f244240fc0e6db3d9018a16851143e20faf4.json
-- graphify-out/cache/7ce858c2c3ebf97a5eb287dd5eb75694d2caada716523c42387653422c5dde33.json
-- graphify-out/cache/7d6836ca94ffba06217872429cc03f5f65dff0b734bf6cd3c8a6f49b2698673e.json
-- graphify-out/cache/8c1ff6a7e6808ef1d4dd8f37741e086383d9083b2aa7f1da3173a02b197b29bb.json
-- graphify-out/cache/8d573b702e741ddb0c48dc4b64e0995242a8fd750b222c5526430a5e12e4778a.json
-- graphify-out/cache/93c8cca9f70956cdbf5864a5f60e6719c651d2534ff1b70895dc584d3c0920cf.json
-- graphify-out/cache/99feeecdb0470d5a9b78a93802f48b9353433c5fc042c95ebfb87726a4c38719.json
-- graphify-out/cache/9de9bbaf898284982bcea856e6eff656bca6e0e3f51117c56a38a51a438eba32.json
-- graphify-out/cache/9e45752675ad01f6bc4a7dacfd4cdf6749b10b3020391b107b62ad77a068cd82.json
-- graphify-out/cache/9ec6118f57f88258bd0e1a68f1cbf9dd476caf91022bd0515a6f1eb1ebf73201.json
-- graphify-out/cache/ae2aec8e3b88f58f009e1b0e1963368db9daf7943a7b97b81610122333abf481.json
-- graphify-out/cache/aea46d239664934796996f286587f2217f2861d4ecd6f25a1476dd149ab68f1c.json
-- graphify-out/cache/b2a8f12dc28bc4f9a616d90cd92346b235b1693fdc31957b4dae18b8184888e1.json
-- graphify-out/cache/b62151ac293d84127d7eefa04b6d4a510480ccee26c73205bed8f4796bf3d7c9.json
-- graphify-out/cache/b8143e17062edc773a31c949103643a7f6e7009618e7eea018f00c57dad46747.json
-- graphify-out/cache/b94263a8f75b83ded1c6181b9459633c20bb4c7f04afd0ed8d595353159a45be.json
-- graphify-out/cache/b971d1a0a230561d8ffc67dbb02de01bce28ff279b5d2745c02bbdf278cad447.json
-- graphify-out/cache/ba3357ea509e8d177543eab31990af858cd998236a42c176c2050c1a7a2f42ae.json
-- graphify-out/cache/baa46624e55c12656c8acfc836646c311439cee2f3e168108cb311457f5edc99.json
-- graphify-out/cache/c4a34502077d9bf6e2b772e3ae880b171daeb9142521b6d84e5a2620e244c549.json
-- graphify-out/cache/c537759fa6dc7ae78ac27f894f92f5bcdfe27ea1a56b0c3859fda5eb8c589858.json
-- graphify-out/cache/c5930f426fe067d1d59187d5497d0a70edb44dc367bb1dd33cca16df2ebacfad.json
-- graphify-out/cache/cbb525e818d5120b3e61b2a53ffc25d4591f758250f809995ead77e44c89b130.json
-- graphify-out/cache/ccf27928d3c34967a8dfe7194c53e4a405f040cfdc0c96507b602438b3bd0ebd.json
-- graphify-out/cache/cd4df35a4dd6fbc29b37f80160d5bbff1128921f0d11a871ea399e753a423757.json
-- graphify-out/cache/ce04cb680e922713cea55a4721ce78b428bd0a61e5d13552cbd85bb0b54c4311.json
-- graphify-out/cache/d47d12dbaa86207a5a31331e53131e702005df8ce269816ad8e885d61dfad754.json
-- graphify-out/cache/d52141ff8c0765660f599ae16d4a6f9392f61de7c911f764a484973b540e1166.json
-- graphify-out/cache/da4a4dabe3211f3ce73202f63cddffc06b00470499cf35e6f2df5b7888ec7d85.json
-- graphify-out/cache/dd9e5a51e52cc89b9bdabb056494bc44160f30076799c4414a82f802862d2b1b.json
-- graphify-out/cache/de5bc15cf1541a388db4e444d73b8700c4f51458e2df1e50e3ebc2351a451771.json
-- graphify-out/cache/e2944ba5253f6d46f60d9d88e24c3f7c4c4e0cf57f730616b64993de85ec010c.json
-- graphify-out/cache/e4ef45b6e2ed66ede581cc0d9c1334e0666fe0941b1a037b001f409c7eccee3c.json
-- graphify-out/cache/e5c9599a6bb7c8b1fed2713f190b531fad937ff67eda8afd7ca28ab1a815c4ae.json
-- graphify-out/cache/ea32a0939723acc542cbf9c6e9b5d53dcb0bc1b020ab934d599afbd788650e03.json
-- graphify-out/cache/ebbeac0d3489118dff328ec6c2e66aa2585c37eef982fc144371c64f17216863.json
-- graphify-out/cache/edb28095ad500f57056b8263d253fe9f1a5ca5f2a1c8f6eca2fde5031b1e9581.json
-- graphify-out/cache/f694142752eb966d0cc78f61c23c11527f77922992cc57c132f2bf10929c6a56.json
-- graphify-out/cache/fa1d66f45e5ebdbf137d87463284098f3f4a2f4e08906791f6ab0193862f06a0.json
-- graphify-out/cache/fa4de03f980ce40d394f791b7f36ac2a0fe9701f66f3437fbfa131dd82e554a0.json
-- graphify-out/cache/fe6f9a5c296b379dd0f889e12c6bfff2841ee52e7989b50955788f2b69fd19a6.json
-- graphify-out/cost.json
-- graphify-out/GRAPH_REPORT.md
-- graphify-out/graph.html
-- graphify-out/graph.json
-- graphify-out/latency-bench-2026-04-18T08-00-41-354Z.json
-- graphify-out/manifest.json
-- graphify-out/memory-map-20260418-034923.json
-- graphify-out/memory/query_20260417_212604_are_the_16_inferred_relationships_involving_runret.md
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `VITE_APP_NAME` | No | `Curalink` | UI branding label displayed in nav and landing |
+| `VITE_API_URL` | No | `` (empty) | API base URL; empty means relative `/api` via Vite proxy |
+
+**Production override** (`client/.env.production`):
+| Variable | Value |
+|---|---|
+| `VITE_API_URL` | `https://curalink-api.onrender.com` |
+
+### LLM Service (`llm-service/` environment)
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `PRIMARY_LLM_PROVIDER` | No | `groq` | Provider order start: `groq`, `huggingface`, or `ollama` |
+| `GROQ_API_KEY` | Cond. | — | Required when `PRIMARY_LLM_PROVIDER=groq` |
+| `GROQ_MODEL` | No | `llama3-8b-8192` | Groq model identifier |
+| `HF_API_TOKEN` | Cond. | — | Required when using HF Inference provider |
+| `HF_MODEL` | No | `mistralai/Mistral-7B-Instruct-v0.3` | HF Inference model identifier |
+| `HF_INFERENCE_URL` | No | — | Custom HF Inference endpoint URL |
+| `OLLAMA_URL` | No | `http://localhost:11434` | Ollama base URL |
+| `OLLAMA_MODEL` | No | `llama3` | Ollama chat model |
+| `OLLAMA_EMBED_MODEL` | No | `nomic-embed-text` | Ollama embedding model |
+| `OLLAMA_EMBED_TIMEOUT_SEC` | No | `30` | Ollama embedding call timeout |
+| `LOCAL_FALLBACK_ENABLED` | No | `true` | Enable hash-based synthetic fallback |
+| `FALLBACK_EMBED_DIM` | No | `384` | Dimensionality for hash synthetic embeddings |
+| `USE_LANGGRAPH_WORKFLOW` | No | `false` | Enable LangGraph node pipeline for generation |
+| `SEMANTIC_CACHE_THRESHOLD` | No | `0.92` | Cosine similarity threshold for cache hits |
+| `SEMANTIC_CACHE_MAX_SIZE` | No | `200` | Max entries in semantic LRU cache |
+| `LOCAL_EMBED_MODEL` | No | `all-MiniLM-L6-v2` | sentence-transformers model name |
+| `EMBEDDING_BACKGROUND_WARMUP` | No | `true` | Warm up embedding model on startup |
+
+---
+
+## 17. Deployment Guide
+
+### Render Deployment (`render.yaml`)
+
+Curalink ships a `render.yaml` that defines two services: `curalink-api` (Node.js backend) and `curalink-llm` (FastAPI LLM service).
+
+```bash
+# Deploy from the Render dashboard
+# 1. Connect your GitHub repo to Render
+# 2. Render auto-detects render.yaml and creates both services
+# 3. Set all required env vars in Render dashboard (see Section 16)
+# 4. Deploy — Render builds and starts both services
+```
+
+Key `render.yaml` service definitions:
+- `curalink-api`: `buildCommand: npm --prefix server install`, `startCommand: npm --prefix server start`, runtime `node-20`
+- `curalink-llm`: `buildCommand: pip install -r llm-service/requirements.txt`, `startCommand: bash llm-service/start.sh`, runtime `python-3.11`
+
+### Hugging Face Spaces Deployment
+
+The `hf-space-curalink-llm/` directory is a self-contained HF Space deployment.
+
+```bash
+# 1. Create a new HF Space (Docker SDK)
+#    https://huggingface.co/new-space
+
+# 2. Push the hf-space-curalink-llm/ contents as the Space root
+git subtree push --prefix hf-space-curalink-llm \
+  https://huggingface.co/spaces/<your-user>/curalink-llm main
+
+# 3. Set Space secrets in HF Space Settings > Variables and secrets:
+#    PRIMARY_LLM_PROVIDER=groq
+#    GROQ_API_KEY=<your-key>
+#    LOCAL_FALLBACK_ENABLED=true
+
+# 4. The Space will build from Dockerfile and expose the FastAPI service
+```
+
+> **Git LFS:** Model binary files tracked via `.gitattributes` will be stored in Git LFS. Ensure `git lfs install` is active before pushing.
+
+### Docker (Local / Custom Host)
+
+```bash
+# Build the LLM service image
+docker build -t curalink-llm ./llm-service
+
+# Run with Groq provider
+docker run -p 8001:8001 \
+  -e PRIMARY_LLM_PROVIDER=groq \
+  -e GROQ_API_KEY=<your-key> \
+  -e LOCAL_FALLBACK_ENABLED=true \
+  curalink-llm
+```
+
+### Wiring Render API → HF Space LLM
+
+Follow these steps to connect a deployed Render backend to a private HF Space LLM service:
+
+**Step 1.** In your HF Space settings, configure runtime variables:
+```
+PRIMARY_LLM_PROVIDER=huggingface   # or groq
+HF_API_TOKEN=<your_hf_token>
+HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3
+LOCAL_FALLBACK_ENABLED=true
+```
+
+**Step 2.** In Render service `curalink-api`, set:
+```
+LLM_SERVICE_URL=https://<your-user>-curalink-llm.hf.space
+LLM_SERVICE_TOKEN=<your_hf_token>   # only if Space is private
+```
+
+**Step 3.** Redeploy `curalink-api` after saving env vars.
+
+**Step 4.** Verify the wiring:
+```bash
+curl https://curalink-api.onrender.com/api/health
+# Should show: { "services": { "llm": "online" } }
+```
+
+**Step 5.** Run a test query and confirm `provider` in the response trace matches your configured provider.
+
+### Environment Injection Best Practices
+
+- **Never commit** `server/.env`, `.env`, or any file containing live secrets. Add them to `.gitignore`.
+- Use platform secret injection (Render env vars, HF Space secrets) for all production credentials.
+- Rotate any keys that have been committed to git history using the provider's key management console.
+- Use `server/.env.example` as the canonical template — keep it up to date when adding new variables.
+
+---
+
+## 18. Design Decisions & Trade-offs
+
+### Decision 1 — Strict Source-Grounded Answer Contract
+
+**Decision:** Generation prompts enforce a strict JSON schema with citation IDs; the model is forbidden from answering outside the provided sources.
+
+**Benefit:** Every claim in the answer is traceable to a numbered source (`P1`, `T1`). Users can inspect the underlying evidence directly. This is essential for medical-adjacent content where hallucination is a patient safety risk.
+
+**Trade-off:** Stronger output constraints reduce free-form fluency. Models occasionally produce awkward phrasing when forced to anchor every sentence to a citation. Parser robustness is critical — bad JSON output from the model requires multi-strategy recovery logic.
+
+---
+
+### Decision 2 — Three-Service Split (React + Express + FastAPI)
+
+**Decision:** UI, retrieval API, and model service are deployed as separate processes with typed HTTP interfaces between them.
+
+**Benefit:** Each service can be scaled, deployed, and updated independently. Python model dependencies are isolated from the Node.js ecosystem. The LLM service can be swapped (local Ollama ↔ HF Space ↔ Groq) without touching the backend.
+
+**Trade-off:** Adds an extra network hop on the critical path. Increases operational complexity (three services to deploy, monitor, and keep healthy). Service unavailability degrades gracefully but adds surface area for failure.
+
+---
+
+### Decision 3 — Hybrid Retrieval Scoring + Optional Semantic Rerank
+
+**Decision:** A deterministic multi-signal scoring function (keyword, recency, location, credibility, intent boost) provides the baseline ranking. Semantic reranking via sentence-transformers is applied as an optional refinement layer.
+
+**Benefit:** The deterministic baseline is reliable even when the LLM service is degraded. Semantic reranking improves context ordering for nuanced queries where keyword overlap is a poor signal.
+
+**Trade-off:** Semantic reranking adds latency (~100–300ms) and a round-trip to the LLM service. The skip-threshold heuristic may not catch all cases where reranking would help. Two scoring systems increase debugging complexity.
+
+---
+
+### Decision 4 — Atlas-First MongoDB Hard Gate
+
+**Decision:** The backend returns `503 Service Unavailable` for all data-dependent endpoints when the MongoDB connection is not in a `connected` state.
+
+**Benefit:** Prevents silent failures where the API appears healthy but is quietly returning stale, empty, or incorrect data. The hard gate forces immediate operational visibility of database issues.
+
+**Trade-off:** Reduces degraded-read capability — in some architectures you might serve cached or partial data when the DB is temporarily unreachable. Stricter runtime dependency means any brief Atlas hiccup causes full API unavailability.
+
+---
+
+### Decision 5 — In-Memory Caches at API and LLM Tiers
+
+**Decision:** Two independent cache layers: `queryResultCache` + `insightsCache` at the Express tier; `SemanticLRUCache` at the FastAPI tier.
+
+**Benefit:** Dramatically reduces repeat-query latency and external API/provider load. The semantic cache can serve similar (not just identical) queries from cache, improving hit rates for common disease research patterns.
+
+**Trade-off:** In-memory caches are per-instance and non-shared — horizontal scaling will have independent cache states. Cache invalidation is time-based (TTL) without event-driven invalidation. Over-aggressive caching can serve stale evidence for rapidly evolving disease areas.
+
+---
+
+### Operational Trade-offs
+
+| Trade-off | Description |
+|---|---|
+| **Provider flexibility vs determinism** | Multi-provider fallback increases availability but introduces variability in output structure and quality, requiring heavy normalization in `parseLLMResponse`. |
+| **Large candidate pools vs latency** | Fetching 50+ candidates per source improves coverage and ranking diversity but increases external API latency and total response time. |
+| **Rich feature surface vs complexity** | Bookmarks, history search, export, analytics, and command palette improve UX but increase route, store, and component coupling and maintenance surface. |
+
+---
+
+## 19. Known Limitations & Caveats
+
+The following issues are known at time of writing and should be addressed before production use.
+
+| # | Severity | Issue | Recommendation |
+|---|---|---|---|
+| 1 | **High** | `server/.env` contains a live MongoDB connection string committed to git history | Rotate the Atlas credentials immediately. Remove the file from git history using `git filter-repo` or BFG Repo Cleaner. Inject credentials via Render env vars only. |
+| 2 | **Medium** | Duplicate `/sessions/:id/insights` route in `server/src/routes/sessions.js` — the second block references `buildSessionInsights` which is undefined in that scope | Remove the duplicate route block; the first handler using `sessionInsights.js` is correct. |
+| 3 | **Low** | Missing `logger` import in the analytics `catch` block within `server/src/routes/sessions.js` | Add `const { logger } = require('../lib/logger')` or use `console.error` as a temporary fallback. |
+| 4 | **Low** | `server/src/services/pipeline/retriever.js` is a placeholder and is not imported or called by `orchestrator.js` | Either implement it as a unified retrieval abstraction or remove the file to avoid confusion. |
+| 5 | **Medium** | `hf-space-curalink-llm/main.py` and `hf-space-curalink-llm2/main.py` mirror `llm-service/main.py` — any change to one must be manually synced to the others | Establish a sync script or CI check that diffs the three files and fails if they diverge. Alternatively, use a shared git subtree or symlink approach. |
+
+---
+
+## 20. Scripts Reference
+
+All scripts are runnable from the workspace root via `npm run <script>`.
+
+### `npm run start:all`
+
+**File:** `start.js`
+
+Multi-service orchestration with dynamic port selection. `start.js`:
+1. Reads `LLM_PORT` from env (default: 8001) and finds a free port using a socket probe.
+2. Starts the LLM service via `uvicorn` with the resolved port.
+3. Starts the backend via `npm run dev` in `server/`, passing `LLM_SERVICE_URL`.
+4. Starts the frontend via `npm run dev` in `client/`.
+5. All three processes are managed with `concurrently` and share a single terminal with colored prefixes.
+
+```bash
+npm run start:all
+```
+
+### `npm run doctor`
+
+Runs the pre-commit health sequence:
+1. Executes `scripts/generate-project-context.mjs` to regenerate `PROJECT_CONTEXT.json` and `.md`.
+2. Runs `check:server`, `check:client`, `check:llm` in sequence.
+3. Exits non-zero if any check fails.
+
+```bash
+npm run doctor
+```
+
+### `scripts/generate-project-context.mjs`
+
+Generates a machine-readable and human-readable snapshot of the project:
+- Walks the file tree (excluding `node_modules`, `__pycache__`, `logs`, `graphify-out`).
+- Extracts all route definitions from Express route files.
+- Reads all `.env.example` files for variable inventories.
+- Reads `package.json` dependency trees for all services.
+- Writes `PROJECT_CONTEXT.json` (machine) and `PROJECT_CONTEXT.md` (human) to workspace root.
+
+```bash
+node scripts/generate-project-context.mjs
+```
+
+### `scripts/integration-smoke.mjs`
+
+Full integration smoke test runner:
+1. Starts all three services in child processes.
+2. Waits for health endpoints to respond (`/api/health`, `/health`).
+3. Runs a sequence of API assertions: create session → send query → verify response shape → check sources → test export.
+4. Reports `✓ PASS` or `✗ FAIL` per assertion with latency.
+5. Tears down all child processes after completion.
+
+```bash
+node scripts/integration-smoke.mjs
+```
+
+### `scripts/latency-bench.mjs`
+
+Latency benchmark runner:
+1. Sends N timed query requests against a running backend (configurable via args).
+2. Collects per-request latencies and computes p50, p95, p99 percentiles.
+3. Writes a timestamped JSON report to `graphify-out/latency-bench-<ISO-timestamp>.json`.
+4. Prints a summary table to stdout.
+
+```bash
+node scripts/latency-bench.mjs
+# Options:
+#   --n 20          Number of requests per endpoint (default: 10)
+#   --url <url>     Backend base URL (default: http://localhost:3001)
+```
+
+---
+
+## 21. Contributing Guidelines
+
+### Branching Strategy
+
+| Branch | Purpose |
+|---|---|
+| `main` | Production-ready code; protected; merges via PR only |
+| `feature/<name>` | New features; branch from `main` |
+| `fix/<name>` | Bug fixes; branch from `main` |
+| `chore/<name>` | Maintenance, dependency updates, docs |
+
+### Pull Request Format
+
+```
+## Summary
+- What changed and why (2–3 bullet points)
+
+## Test plan
+- [ ] `npm run doctor` passes
+- [ ] `node scripts/integration-smoke.mjs` passes
+- [ ] Manual test: describe the golden path you tested
+
+## Notes
+- Any breaking changes, migration steps, or reviewer callouts
+```
+
+### Before Every Commit
+
+```bash
+npm run doctor
+```
+
+This regenerates `PROJECT_CONTEXT.*` and runs all service checks. Do not open a PR with failing checks.
+
+### Keeping LLM Mirrors in Sync
+
+`llm-service/main.py`, `hf-space-curalink-llm/main.py`, and `hf-space-curalink-llm2/main.py` must remain functionally identical. When modifying any one of them:
+
+1. Apply the same change to all three files.
+2. Diff them before committing: `diff llm-service/main.py hf-space-curalink-llm/main.py`
+3. A CI check that diffs these files is recommended.
+
+### Log and Artifact Management
+
+- `logs/` and `graphify-out/` are runtime artifact directories. They are listed in `.gitignore` and must not be committed.
+- `PROJECT_CONTEXT.json` and `PROJECT_CONTEXT.md` are generated — only commit them when explicitly running `npm run doctor` as part of a PR that changes project structure.
+- Never manually edit files in `graphify-out/`.
+
+### Dependency Updates
+
+- Use `npm audit fix` for security patches.
+- Pin Python dependencies in `llm-service/requirements.txt` with exact versions.
+- Test the full integration smoke suite after any dependency update.
+
+---
+
+## 22. License
+
+```
+MIT License
+
+Copyright (c) 2026 Nikhil
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
+<p align="center">
+  Built with evidence-first principles · Last updated 2026-04-19
+</p>
